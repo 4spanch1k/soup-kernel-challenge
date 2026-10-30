@@ -23,3 +23,13 @@ Triton GEMM or attention on this T4 (no tensor cores), persistent or shipped Tri
 ```text
 You take over a hackathon repo (https://github.com/4spanch1k/soup-kernel-challenge, local /Users/aspanch1k/decentrathon-6.0/soup-s). Read docs/HANDOFF_FINAL_NOTE.md first, then AGENTS.md, docs/HANDOFF.md, docs/FINISH_CHECKLIST.md. Goal: finish safely before 2026-10-31 23:59 Astana. 1) Check the result of the A/B run described in the note (ask the user to paste the Colab cell output if you cannot see it) and apply the decision rule for branch x/causal-attn. 2) Otherwise keep main frozen. 3) Help the teammate yujio2x with docs/FINISH_CHECKLIST.md: fill README/SUBMISSION TODOs only with real facts, never invent links. Never merge without the user's explicit approval in chat, never edit harness/, tests/, task/, never download local models.
 ```
+
+## RESULT of the A/B run (2026-10-31, Colab T4, torch 2.11.0, triton 3.6.0; solution-only runs, MEASURED)
+| Run | main (6f3a11e) | x/causal-attn (72a5f19) |
+|---|---|---|
+| public rows, pair 1 | 59.93 s, 5,441 MiB, eval 2.04949 | 59.87 s, 5,441 MiB, eval 2.04949 |
+| all-512-token edge file (no padding in any batch) | 87.1 s, 6,961 MiB, eval 2.11128 | 88.95 s, 6,961 MiB, eval 2.11128 |
+Solution tests: 52 passed (including the new dense/no-mask/left-padding tests). The second public pair was still running when this was written.
+Verdict: the causal branch gives NO measurable gain (-0.06 s on the public rows, +1.8 s on the edge file, same memory, same loss). The microbenchmark gain
+(1.94 vs 2.94 ms per layer at T=512) did not show up end to end. By the decision rule: do NOT merge; `main` stays frozen. Also: main handles an all-512-token
+edge batch correctly (87.1 s, 6,961 MiB, no failure, same peak as the branch), so the feared math-attention fallback did not change memory here.
