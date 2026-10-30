@@ -24,4 +24,5 @@ sed -i 's/        table = kernel_table(prof)/        _shape_report(prof)\n      
 CFG=runs_try/solution_profile/task.yaml
 [ -f "$CFG" ] || { echo "run scripts/kaggle_2_quick.sh first (needs $CFG)"; exit 1; }
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True SOUP_NO_AUDIT_LOG=1 \
-  python harness/_train_dbg.py --config "$CFG" --metrics /tmp/dbg_metrics.json --solution --profile /tmp/dbg_profile.json 2>&1 | grep -A30 "TOP ops"
+  python harness/_train_dbg.py --config "$CFG" --metrics /tmp/dbg_metrics.json --solution --profile /tmp/dbg_profile.json > /tmp/dbg.log 2>&1
+grep -A30 "TOP ops" /tmp/dbg.log || { echo "NO REPORT; log tail:"; tail -25 /tmp/dbg.log; }
