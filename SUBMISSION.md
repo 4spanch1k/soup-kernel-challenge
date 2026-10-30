@@ -3,7 +3,8 @@
 ## Links
 
 - Repository: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx
-- Final commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16 (`main` after PR #11). `solution/` is byte-identical to commit `29184d9`, the code measured on the T4; only README/SUBMISSION text changed since.
+- Submission code commit: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2. The following documentation commit only records this link and checklist status.
+- Kaggle-measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
 - Public Kaggle notebook: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146 (saved version 1, all checks passed).
 - Demo video (up to 3 minutes): TODO — add the public video link.
 - Presentation: TODO — add the presentation link.

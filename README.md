@@ -7,6 +7,8 @@ data, batches, training steps, optimizer, schedule, LoRA settings, or Soup switc
 
 **Team repository:** [BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
 
+**Submission code snapshot:** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
+
 **Public Kaggle notebook:** [saved version 1, with results](https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146).
 The notebook pins [b587c5c](https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16), as specified in `docs/FINISH_CHECKLIST.md`.
 
