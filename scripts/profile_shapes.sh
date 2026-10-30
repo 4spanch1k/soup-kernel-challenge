@@ -3,11 +3,11 @@
 # expensive ones. Uses a patched COPY of harness/_train.py (the harness itself is not touched).
 set -u
 cd "$(dirname "$0")/.."
-sed -e 's/schedule=schedule(wait=PROFILE_WAIT, warmup=PROFILE_WARMUP,/record_shapes=True, schedule=schedule(wait=PROFILE_WAIT, warmup=PROFILE_WARMUP,/' \
-    harness/_train.py > harness/_train_dbg.py
-cat >> harness/_train_dbg.py <<'PY'
-
-
+python - <<'PY'
+src = open("harness/_train.py").read()
+src = src.replace("schedule=schedule(wait=PROFILE_WAIT, warmup=PROFILE_WARMUP,",
+                  "record_shapes=True, schedule=schedule(wait=PROFILE_WAIT, warmup=PROFILE_WARMUP,")
+report = '''
 def _shape_report(prof):
     rows = []
     for e in prof.key_averages(group_by_input_shape=True):
@@ -17,10 +17,15 @@ def _shape_report(prof):
             rows.append((t, e.count, e.key, str(e.input_shapes)[:110]))
     rows.sort(reverse=True)
     print("TOP ops by GPU time, per step (16 steps):")
-    for t, c, k, s in rows[:22]:
+    for t, c, k, s in rows[:24]:
         print(f"{t/16/1000:7.2f} ms/step n={c//16:4d} {k:18s} {s}")
+
+
+'''
+src = src.replace("def main():", report + "def main():", 1)
+src = src.replace("        table = kernel_table(prof)", "        _shape_report(prof)\n        table = kernel_table(prof)")
+open("harness/_train_dbg.py", "w").write(src)
 PY
-sed -i 's/        table = kernel_table(prof)/        _shape_report(prof)\n        table = kernel_table(prof)/' harness/_train_dbg.py
 CFG=runs_try/solution_profile/task.yaml
 [ -f "$CFG" ] || { echo "run scripts/kaggle_2_quick.sh first (needs $CFG)"; exit 1; }
 CUDA_VISIBLE_DEVICES=0 PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True SOUP_NO_AUDIT_LOG=1 \
