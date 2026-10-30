@@ -1,225 +1,148 @@
-# Soup Kernel Challenge
+# Soup Kernel Challenge: Our Solution
 
-Make `soup train` faster and lighter on a free Kaggle T4 with your own Triton kernels.
-Case of [Soup](https://github.com/MakazhanAlpamys/Soup) at Decentrathon 6.0,
-October 30 12:00 – October 31 23:59 (Astana time, UTC+5; the deadline is October 31 18:59 UTC).
-Teams of up to 4, one result per team. AI agents are allowed.
+We optimized the fixed `soup train` run with our own Triton kernels. The run remains Soup CLI
+0.77.0 with Qwen2.5-1.5B-Instruct, NF4 weights, LoRA r=16 on `q_proj` and `v_proj`, and fp16 on a
+Tesla T4. The fixed task uses batch 4, up to 512 tokens and 64 steps. We did not change the model,
+data, batches, training steps, optimizer, schedule, LoRA settings, or Soup switches.
 
-## The task
+**Public Kaggle notebook:** TODO — add the saved public Kaggle notebook URL (not yet available).
 
-`soup train` with `soup-cli==0.77.0` fine-tunes **Qwen2.5-1.5B-Instruct** (4-bit NF4 weights,
-LoRA r=16) on 256 Kazakh instructions: batch 4, up to 512 tokens, one epoch (64 steps), on one
-of the two GPUs Kaggle gives. Public rows: 0–255 for training, 40000–40255 for your own eval; the
-jury trains and evaluates on other, hidden rows. Make this same run take less time or less GPU memory, without
-changing what it trains. Your own `@triton.jit` kernels must do real work in it.
+## What we changed
 
-Base Soup on a Kaggle T4 (our measurement; yours comes from `harness/run_task.py`):
+A shape-recording profile showed that the residual stream stays in fp32: `prepare_model_for_kbit_training`
+keeps the embedding in fp32, and bitsandbytes `Linear4bit` returns its result in the input dtype.
+That causes fp16 linear outputs to be converted back to fp32 and keeps activations in fp32; casts
+and adds took about 17% of GPU time in that profile. We therefore kept the residual stream's
+required fp32 values while writing normalized activations directly in the autocast dtype.
 
-| | Base Soup 0.77.0 |
-|---|---|
-| Whole `soup train` command | about 79–83 s (56–61 s of it are the 64 training steps) |
-| Peak GPU memory (nvidia-smi) | about 14,350 MiB of 15,360 |
-| Held-out loss: no adapter → after training | 2.271 → 2.050 (−9.7%) |
+The output head also creates a very large vocabulary-logit tensor. Our head processes token rows
+in chunks, calculates Soup's loss and logged statistics without materializing all logits, and
+keeps the gradients for labelled tokens only. RMSNorm, RoPE, NF4 dequantization, and the
+residual adds fused with RMSNorm are also handled by Triton. RMSNorm, RoPE and the fused
+add-plus-norm each have forward and backward kernels; NF4 dequantization replaces bitsandbytes'
+dequantization both in the 4-bit matmul forward and in its backward.
 
-Where the GPU time of a training step goes (our torch.profiler run of base Soup): matrix multiplies about
-36%, element-wise ops and dtype casts about 44%, softmax / cross-entropy over the 151,936-token
-vocabulary about 7%, attention about 5%, NF4 dequantization about 5%. For scale: Unsloth trains a
-similar LoRA on the same data and GPU in about 2,400 MiB (with its own gradient offloading and
-LoRA on all seven projections).
+| Kernel | File | Replaces | Key idea |
+|---|---|---|---|
+| `head_stats_kernel` | `solution/ce_loss.py`, wired by `solution/head_patch.py` | Full output logits and their loss/metric passes | Project 256 token rows at a time; online log-sum-exp computes cross-entropy, entropy and argmax, then reuses the chunk for the loss gradient. Padding rows are dropped; the hidden gradient is computed chunk by chunk, with the loss scale applied in backward. |
+| `rmsnorm_fwd_kernel`, `rmsnorm_bwd_kernel` | `solution/rmsnorm.py` | Qwen2 RMSNorm's sequence of PyTorch operations | Normalize one row per program with fp32 statistics and save only one reciprocal standard deviation per row. Under autocast, write the consumer dtype directly. |
+| `rope_kernel` | `solution/rope.py` | Qwen2's separate slice, rotate, multiply and add operations for Q and K | Rotate both halves of a head in one forward kernel; apply the inverse rotation in backward. |
+| `nf4_dequant_kernel` | `solution/nf4_dequant.py` | bitsandbytes' dequantization (`dequantize_4bit` in backward; the dequantize step of `gemm_4bit` in `MatMul4Bit.forward`) for supported nested NF4 weights | Decode packed nibbles and nested scales with the NF4 lookup table, interleave the two nibbles and write the dequantized fp16 weights in one contiguous store. |
+| `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py`, `solution/layer_tail.py` | Each residual add followed by an RMSNorm: the post-attention add + norm, and the MLP add + the next layer's input norm (or the final norm) | Add and normalize in one forward kernel, retaining the fp32 residual and writing the normalized value in the consumers' autocast dtype; combine both gradient paths in backward. `layer_tail.py` (a replacement of `Qwen2Model.forward` for the training case, with fallback to the original) applies it at layer boundaries. |
 
-## Quick start on Kaggle
+The starter kit's `solution/swiglu.py` example remains active. It is not our work and is not
+included in our kernel share.
 
-1. Work in the GitHub repository that the hackathon platform created for your team: work in other
-   repositories is not checked. If it is empty or holds only a README, copy this starter kit into
-   it (the **Use this template** button only makes a new repository and cannot fill an existing
-   one):
+### Sources and implementation boundary
 
-   ```bash
-   git clone <your platform repository> && cd <its folder>
-   git fetch https://github.com/MakazhanAlpamys/soup-kernel-challenge.git main
-   git checkout FETCH_HEAD -- .
-   git commit -m "Soup Kernel Challenge starter kit"
-   git push origin HEAD
-   ```
+- The online softmax calculation follows the idea in Milakov and Gimelshein's 2018 paper,
+  [Online normalizer calculation for softmax](https://arxiv.org/abs/1805.02867).
+- The chunked linear cross-entropy approach was informed by
+  [Liger-Kernel](https://github.com/linkedin/Liger-Kernel) and Apple's
+  [Cut Cross-Entropy](https://github.com/apple/ml-cross-entropy). Our kernels are written in this
+  repository; neither project is imported or enabled.
+- The NF4/QLoRA format follows Dettmers et al.,
+  [QLoRA (2023)](https://arxiv.org/abs/2305.14314), and the
+  [bitsandbytes source](https://github.com/bitsandbytes-foundation/bitsandbytes).
+- We read Soup's `stream_loss_chunk` implementation to identify the outputs that must be
+  preserved. We do not enable that Soup switch. The rewind recorder's `STEP_ATTR` name is reused
+  only to hand it our per-token losses.
 
-   The kit's files replace files of the same name (README.md, for example); nothing else changes.
-   Without git: **Code → Download ZIP**, unpack it and upload the files.
-2. In Kaggle: **Create → New Notebook → File → Import Notebook**, pick
-   `templates/kaggle_notebook.ipynb`. Settings: **Accelerator GPU T4 x2**, **Internet on** (a
-   phone-verified Kaggle account; the free quota is about 30 GPU hours a week). For a private
-   repository add a Kaggle secret `GITHUB_TOKEN` with a read-only token.
-3. Put your repository URL in the first code cell and press **Run All** (about 10 minutes). You
-   get the base and your solution side by side, `runs/result.json` and the table of checks.
-4. Write your kernels in `solution/`, push, press Run All again (it clones your code afresh).
+## Results
 
-Locally on a Linux machine with a CUDA GPU:
+These are one base run and one solution run from `harness/run_task.py`, followed by
+`harness/check_rules.py`, on a Google Colab Tesla T4. The measured solution was branch
+`h/nf4-forward`, commit `1626fe6` (the final code of this repository).
 
-```bash
-pip install "soup-cli[train]==0.77.0" "transformers==5.16.1" "peft==0.20.0" "trl==0.29.1" \
-    "bitsandbytes==0.50.2" "accelerate==1.14.0" pytest
-python task/prepare_data.py          # data/train.jsonl, data/eval_public.jsonl
-python -m pytest solution -q         # your kernels against plain PyTorch
-python harness/run_task.py           # base, then solution -> runs/result.json
-python harness/check_rules.py        # the checks -> runs/checks.json
+| Metric | Base Soup | Ours | Result |
+|---|---:|---:|---:|
+| Whole `soup train`, seconds | 80.9 | 68.2 | 1.185x speedup in this pair |
+| Peak GPU memory, MiB | 14,345 | 6,321 | 2.269x lower |
+| Eval loss | 2.04966 | 2.04949 | -0.008% vs base |
+
+All 10 harness checks passed on that Colab T4 run. Our kernels accounted for 8.8% of training time
+(check 4). The loss-curve gap was 0.03% on the first step and 0.04% on average (check 6). Time
+and memory were 0.844x and 0.441x of base (check 8). Soup's 79 regression tests passed with
+`apply()` active (check 10), and all 42 solution tests passed on the T4.
+
+How we got there on the same machine (one run each; base time varied between 77.5 s and 80.9 s):
+
+| Step | Time, s | Peak, MiB | Check 4 |
+|---|---:|---:|---|
+| Chunked CE + RMSNorm + RoPE | 75.6 | 8,427 | 2.9% (fail) |
+| + own NF4 dequantization in backward | 75.7 | 8,427 | 4.97% (fail) |
+| + RMSNorm writes fp16, fused add + post-attention norm | 65.8 | 6,321 | 6.4% |
+| + fused layer boundaries (`layer_tail.py`) | 68.4 | 6,321 | 6.0% |
+| + own NF4 dequantization in the matmul forward (final) | 68.2 | 6,321 | 8.8% |
+
+The layer-boundary fusion did not change the time measurably against run-to-run noise; it stays
+because the final configuration passed all checks with the largest margin. Observed speed gains
+over several base runs are roughly 1.07x to 1.19x, not a stable precise ratio.
+
+## Limits
+
+- These results are from Colab, not Kaggle. The team's Kaggle account lacks phone verification
+  required for GPU and Internet access, so a Kaggle run has not been completed and may differ.
+- Each side has one measured run. The jury uses hidden rows and two runs per side; results can
+  move. Check 4 passed by about 3.8 percentage points in the final run.
+- `solution/recompute.py` can recompute MLP activations but is off by default and was not measured.
+- RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
+  Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.
+- The kernels use Triton 3.x features including `tl.interleave` and `tl.argmax` in loops, and
+  PyTorch APIs available in torch 2.4 or newer.
+
+## How to run
+
+The repository is public at
+[github.com/4spanch1k/soup-kernel-challenge](https://github.com/4spanch1k/soup-kernel-challenge).
+For Kaggle, import `notebook/soup_kernel_challenge.ipynb` and select a T4 GPU with Internet
+enabled. Or clone the public repository in one notebook cell:
+
+```python
+!git clone https://github.com/4spanch1k/soup-kernel-challenge.git /kaggle/working/repo
+%cd /kaggle/working/repo
+!bash scripts/kaggle_1_tests.sh
 ```
 
-Only numbers from a Kaggle T4 count; on Ampere and newer GPUs Soup trains in bf16, a different
-path.
+Then run `!bash scripts/kaggle_2_quick.sh` for a solution-only profiled run, or
+`!bash scripts/kaggle_3_full.sh` for base-versus-solution measurement, all 10 checks and the
+score. The test script installs the pinned packages, prepares the public data and runs both test
+suites.
 
-## How your code plugs in
+For Colab, select a T4 GPU and run this setup in a code cell:
 
-`harness/run_task.py` starts each run in a fresh process (`harness/_train.py`), which imports
-your package `solution/` and calls `solution.apply()` before Soup builds the model and the
-trainer. From there you can patch anything in transformers, peft, bitsandbytes or Soup, the way
-Unsloth patches models. Everything of yours lives in `solution/`: the jury copies only that
-folder into a fresh copy of this kit.
+```python
+!git clone https://github.com/4spanch1k/soup-kernel-challenge.git
+%cd soup-kernel-challenge
+!python -m pip install "soup-cli[train]==0.77.0" "transformers==5.16.1" "peft==0.20.0" "trl==0.29.1" \
+    "bitsandbytes==0.50.2" "accelerate==1.14.0" pytest
+!python task/prepare_data.py
+```
 
-`solution/swiglu.py` is a complete example: a fused SwiGLU forward and backward kernel in Triton,
-an autograd function around it, and the patch of `Qwen2MLP.forward`. It works out of the box, so
-the first Run All already goes through the whole path. Its kernels do not count as yours under any
-name or rewrite (`check_rules.py` recognizes renamed copies and flags close rewrites, which the
-jury reads by hand), so on a fresh
-template checks 3 and 4 fail until you add kernels of your own. You may keep the example running
-next to them: on its own it lowers peak memory by about 2,000 MiB (14%), keeps the speed within a
-few percent and takes about 5% of the training time.
+For local Linux with CUDA, run the equivalent shell setup from the repository root after cloning:
 
-What the base run does on a T4 (Soup 0.77.0 with this config), so you know where time and memory
-go:
+```bash
+python -m pip install "soup-cli[train]==0.77.0" "transformers==5.16.1" "peft==0.20.0" "trl==0.29.1" \
+    "bitsandbytes==0.50.2" "accelerate==1.14.0" pytest
+python task/prepare_data.py
+```
 
-- weights in 4-bit NF4 (bitsandbytes, double quant), compute in fp16; `prepare_model_for_kbit_training`
-  keeps the norms, biases and the tied embedding / `lm_head` in fp32;
-- LoRA r=16, alpha=32, dropout 0.05 on `q_proj` and `v_proj` only (`target_modules: auto`);
-- no gradient checkpointing, SDPA attention, plain `adamw_torch`, cosine schedule;
-- the trainer is TRL's `SFTTrainer` (Soup's subclass `RewindSFTTrainer`): the loss covers the
-  assistant tokens only; every step TRL also computes entropy and token accuracy from the full
-  logits, and Soup writes each row's loss to `rewind.jsonl`. These are Soup outputs: keep them
-  with the same values (you may compute them faster).
+Run the kernel tests and Soup regression tests:
 
-Places to hook in `apply()` (all looked up at call time):
+```bash
+python -m pytest solution -q
+SOUP_APPLY_SOLUTION=1 python -m pytest tests -q
+```
 
-- model classes, e.g. `transformers.models.qwen2.modeling_qwen2.Qwen2MLP.forward` (the example);
-- `soup_cli.trainer.sft.SFTTrainerWrapper._setup_transformers`: when it returns, `self.model` is
-  the final 4-bit PEFT model, before the trainer is built;
-- `soup_cli.trainer.sft.SFTTrainerWrapper.train`: the trainer and the model exist, training has
-  not started;
-- `trl.SFTTrainer` (Soup builds its trainer class from it during setup), peft and bitsandbytes
-  functions.
+Run a quick solution-only measurement, or the full base-versus-solution measurement and checks:
 
-Patch narrowly. `apply()` also runs before Soup's regression tests (check 10), where some tests
-call these methods with fake transformers/peft modules; a patch that assumes a real Qwen model
-everywhere fails them. Guard it (`if not isinstance(self.model, torch.nn.Module): return ...`) and
-run `SOUP_APPLY_SOLUTION=1 python -m pytest tests -q` yourself. Do not add trainable parameters:
-the adapter must stay the same LoRA (check 5). Launch your kernels normally, not through CUDA
-graphs, or the harness cannot see them.
+```bash
+python harness/run_task.py --only solution --out runs_try
+python harness/run_task.py && python harness/check_rules.py
+```
 
-| Path | What it is | Yours to edit |
-|---|---|---|
-| `solution/` | your kernels, `apply()` and their tests | yes |
-| `task/task.yaml` | the fixed Soup config | no |
-| `task/prepare_data.py` | downloads the data, writes the public rows | no |
-| `harness/run_task.py` | runs base and solution, measures time, memory, quality | no |
-| `harness/_train.py` | one `soup train` run in a process, with or without `apply()` | no |
-| `harness/eval_adapter.py` | quality: held-out loss of an adapter | no |
-| `harness/check_rules.py` | the checks, one line each | no |
-| `harness/score.py` | ratios and points | no |
-| `harness/common.py`, `harness/example_reference.py` | shared settings, a frozen copy of the example | no |
-| `tests/` | Soup's regression tests: 79 tests in five files | no |
-| `templates/` | Kaggle notebook, `SUBMISSION.md` | copy and fill |
-
-## What is measured
-
-- **Time**: the wall time of the whole `soup train` command, from start to saved adapter, timed
-  from outside the process. Triton compilation and autotuning count: every run starts with empty
-  compiler caches. Base and solution run in the same session; the score uses the ratio.
-- **Memory**: peak GPU memory, sampled by `nvidia-smi` from outside the process every 100 ms and
-  summed over all GPUs. Both sides run with `PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True`,
-  so the peak follows the tensors that are alive rather than allocator fragmentation.
-- **Quality**: `harness/eval_adapter.py`, the mean loss on the answer tokens of held-out rows. It
-  loads your adapter with plain transformers + peft, without your code.
-- **Your kernels' share**: inside the same measured runs, every launch of a `@triton.jit` kernel
-  defined in `solution/` is timed with CUDA events from step 3 on, against the training time of
-  those steps.
-
-The jury runs the same scripts on hidden rows of the same dataset with another seed, base and
-solution twice each in the order base, solution, solution, base, in a fresh copy of this kit with
-only your `solution/`.
-
-## Rules
-
-Allowed: your own Triton kernels, autograd functions and patches; recomputation or offloading in
-your own code (its time counts); `torch.compile` (its kernels are not yours); packages torch,
-triton, transformers, peft, trl, bitsandbytes and `soup-cli==0.77.0`; ideas from other kernels
-when you name the source.
-
-Not allowed:
-
-- ready-made kernel libraries: unsloth, liger-kernel, xformers, flash-attn, torchao and the rest
-  of the list in `harness/common.py`, and installing packages during the run;
-- copying other projects' kernel code as your own; kernels whose output training does not use
-  (busy work) do not count;
-- changing the task: model, data, batches and their order, number of steps, LoRA settings
-  (dropout included), optimizer and schedule, Soup's switches (`backend: unsloth`,
-  `gradient_checkpointing`,
-  `activation_offloading`, `fast_lora`, `use_liger`, `use_cut_ce`, `packing`, `padding_free` and
-  the like), and Soup's outputs. Removing padding inside a batch in your own code is fine; mixing
-  rows across batches is not;
-- getting around the measurement: another GPU, background processes, different behaviour when
-  measured or tested, other allocator settings, replacing the saved adapter, prebuilt compiled
-  caches;
-- reading the hidden rows or any files outside your repository and the task data;
-- changing `harness/`, `tests/` or `task/` (the jury uses its own copy anyway).
-
-## Checks
-
-`harness/check_rules.py` prints one line per check and writes `runs/checks.json`. Every check
-must pass on the jury's run, and the jury reads your code: its review decides in disputes.
-
-| # | Check | Limit |
-|---|---|---|
-| 1 | every base and solution run finished | all runs exit 0 |
-| 2 | no ready-made kernel libraries | not imported in `solution/`; not loaded in the runs (torchao is checked in `solution/` only, peft may load it by itself); no packages installed during the run |
-| 3 | your `@triton.jit` kernels in `solution/` run in training | launched in every solution run; the example's kernels do not count |
-| 4 | your kernels together take enough of the training time | at least 5%, CUDA events, steps 3+, lowest run |
-| 5 | same task and Soup outputs | steps, adapter config, adapter tensor names and shapes, trainer settings, logged metric names, tokens per step, rewind rows and token counts equal; entropy, accuracy and rewind row losses within 3% |
-| 6 | loss curve follows the base | first step within 1%, mean of all steps within 3% |
-| 7 | quality | eval loss at most 0.5% above the base |
-| 8 | not worse than the base | time and memory at most 10% above the base |
-| 9 | clean measurement | a Tesla T4, GPUs idle at start (under 1,000 MiB), one GPU, harness allocator, nvidia-smi peak at least 97% of PyTorch's reserved peak |
-| 10 | Soup regression tests with your patches | 79 tests pass |
-
-When a check fails, its line says why. Logs of every run are in `runs/<run>/train.log` and
-`runs/eval_*.log`; per-step metrics in `runs/<run>/adapter/checkpoint-*/trainer_state.json`.
-
-While iterating: `python harness/run_task.py --only solution --out runs_try` trains only your
-solution (checks 1 and 5–8 need the base, so they fail there); `--profile` adds one profiled run with
-the GPU time of every CUDA kernel in `runs/solution_profile/profile.json`.
-
-## Scoring (100 points)
-
-| Criterion | Points |
-|---|---|
-| Works and correct: every check passes and the code review agrees | 20 |
-| Speed: `35 * ln(s) / ln(best s)`, s = base time / your time | 35 |
-| Memory: `30 * ln(m) / ln(best m)`, m = base peak / your peak | 30 |
-| README and reproducibility | 15 |
-
-A gain under 5% counts as a tie (ratio 1.0). "Best" is the best admitted team. A team that fails a
-check, or whose code or README the jury does not accept, is not admitted and gets no speed or
-memory points. `harness/score.py` prints your ratios.
-
-The jury gives the README points in three parts, up to 5 each: what you did, how to run it,
-results and limits. If two teams have the same total, the one with the better memory result ranks
-higher.
-
-## Submit
-
-Everything is submitted on the hackathon platform: your repository, the video (up to 3 minutes)
-and the presentation. Rewrite this README for your solution (what you did, how to run it,
-results, limits) and put the link to your public Kaggle notebook in it. Fill
-`templates/SUBMISSION.md` and put it in the root of your repository: links to the final commit,
-the public Kaggle notebook (a saved version with `COMMIT` set to that commit), the video and the
-presentation. The Kaggle link must be in both the README and `SUBMISSION.md`. By the deadline the
-repository must be open to the jury: public, or with access for the jury through the platform.
+The harness writes `runs/result.json` and `runs/checks.json`. Results count for the challenge only
+on the jury's T4 environment.
 
 ## License
 

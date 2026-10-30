@@ -13,8 +13,22 @@ The rules in short (the README and the task statement have the full ones):
   settings and outputs; no other GPU, no background processes, no tricks with the measurement.
 """
 
+from .add_rmsnorm import patch_qwen2_decoder_layer
+from .head_patch import patch_head
+from .layer_tail import patch_qwen2_layer_tail
+from .nf4_dequant import patch_bnb_dequantize
+from .recompute import patch_qwen2_mlp_recompute
+from .rmsnorm import patch_qwen2_rmsnorm
+from .rope import patch_qwen2_rope
 from .swiglu import patch_qwen2_mlp
 
 
 def apply():
     patch_qwen2_mlp()  # the example: works out of the box, does not count as your own kernel
+    patch_qwen2_mlp_recompute()  # C: MLP recomputation, off unless enabled (recompute.py)
+    patch_qwen2_rmsnorm()  # B: fused RMSNorm (rmsnorm.py)
+    patch_qwen2_rope()     # B: fused rotary embedding (rope.py)
+    patch_qwen2_decoder_layer()  # F: residual add + norm fused (add_rmsnorm.py)
+    patch_qwen2_layer_tail()  # Fuse the MLP residual with the following norm.
+    patch_head()           # A: chunked output head + fused cross-entropy (ce_loss.py)
+    patch_bnb_dequantize()  # E: NF4 weight dequantization (nf4_dequant.py)

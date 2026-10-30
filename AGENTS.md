@@ -4,7 +4,8 @@ Project: Soup Kernel Challenge (Decentrathon 6.0). Read `README.md` for the task
 `docs/PLAN.md` for our analysis and plan before changing anything.
 
 ## Hard rules (breaking one disqualifies the team)
-- Edit only `solution/`, `docs/`, `AGENTS.md`, `CLAUDE.md`, `README.md`, `SUBMISSION.md`.
+- Edit only `solution/`, `docs/`, `scripts/`, `notebook/`, `AGENTS.md`, `CLAUDE.md`, `README.md`,
+  `SUBMISSION.md`. Only `solution/` is copied into the jury's run; the rest is our tooling and docs.
   Never edit `harness/`, `tests/`, `task/`; the jury uses its own copy.
 - Do not change the task: model, data, batch order, steps, LoRA settings (dropout too), optimizer,
   schedule, Soup switches (`unsloth`, `use_liger`, `use_cut_ce`, `stream_loss_chunk`,
