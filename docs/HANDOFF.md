@@ -95,3 +95,12 @@ ALL 10 CHECKS PASS. base 80.8 s / 14,339 MiB, ours 66.2 s / 5,419 MiB (x1.221, 2
 loss-curve gap <= 0.05%. `w/load-phase` (Codex): no value-preserving saving > 0.5 s in the model-load phase (analysis in that branch,
 docs/LOAD_PHASE_ANALYSIS.md, scripts/load_phase_timeline.py). Decision: the thread-warm-up idea is NOT used (rule risk).
 Remaining ideas by value: LoRA-path fusion (-150..300 MiB, -5..15 ms), nothing else big is known. main is the submission candidate.
+
+## 11. `l/lora-fuse` (Codex, tested on T4): rejected
+Tests: 2 pass, the PEFT-dependent test skips/fails on Colab because of an old preinstalled torchao (env issue). With SOUP_LORA_FUSE=1 the
+harness reports `_add_scaled_kernel, _dropout_backward_kernel, _dropout_cast_kernel` as NOT launched: the patch never fired because for
+bitsandbytes 4-bit layers PEFT uses `peft.tuners.lora.bnb.Linear4bit` (its own forward), not the generic `lora.layer.Linear` that was patched.
+Result with the (inactive) patch: 63.2 s / 5,441 MiB = identical to main. Microbenchmark of the fused call alone (scripts/bench_lora_fuse.py):
+slower at N=826 (1.26 vs 0.94 ms per q call, ~+17 ms/step over 56 calls) and only ~-12 MiB retained per layer at N=2048 (~-330 MiB at the peak batch),
+so even if re-targeted the net score effect is about zero or negative. Do not pursue unless a clearly cheaper design appears.
+Conclusion: main (29184d9) is the best measured code; all experiment branches are rejected. Everything left is human-only (see section 6).
