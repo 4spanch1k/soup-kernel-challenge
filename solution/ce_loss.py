@@ -51,7 +51,8 @@ def head_stats_kernel(logits_ptr, target_ptr, loss_ptr, entropy_ptr, hit_ptr, ro
         shrink = tl.exp(run_max - new_max)
         e = tl.exp(x - new_max)
         run_sum = run_sum * shrink + tl.sum(e, 0)
-        run_wsum = run_wsum * shrink + tl.sum(tl.where(inside, e * x, 0.0), 0)
+        safe_x = tl.where(inside, x, 0.0)  # padded lanes are -inf: keep 0 * -inf out of the sum
+        run_wsum = run_wsum * shrink + tl.sum(tl.where(inside, e, 0.0) * safe_x, 0)
         better = block_max > best
         best_idx = tl.where(better, start + tl.argmax(x, 0), best_idx)
         best = tl.maximum(best, block_max)
@@ -65,7 +66,8 @@ def head_stats_kernel(logits_ptr, target_ptr, loss_ptr, entropy_ptr, hit_ptr, ro
     tl.store(hit_ptr + row, tl.where(has_target & (best_idx == target), 1, 0))
 
     if WRITE_GRAD:
-        for start in range(0, vocab, BLOCK):
+        grad_end = tl.where(has_target, vocab, 0)  # prompt-only rows share a chunk: skip them
+        for start in range(0, grad_end, BLOCK):
             cols = start + lane
             inside = cols < vocab
             x = tl.load(base + cols, mask=inside, other=float("-inf")).to(tl.float32)
@@ -119,7 +121,10 @@ def _forward(ctx, hidden, weight, labels, attention_mask, denominator, chunk):
         token_entropy[perm] = entropy_rows
         token_loss[perm] = loss_rows
 
-    den = float(denominator) if denominator is not None else float(max(n_lab, 1))
+    if denominator is None:
+        den = torch.full((), float(max(n_lab, 1)), dtype=torch.float32, device=device)
+    else:  # a Python number or a device scalar; never read back to the host
+        den = torch.as_tensor(denominator, dtype=torch.float32, device=device).clamp_min(1.0)
     ctx.den, ctx.hidden_shape, ctx.hidden_dtype = den, hidden.shape, hidden.dtype
     ctx.save_for_backward(grad_rows if grad_rows is not None else lab_idx.new_empty(0), lab_idx)
     ctx.has_grad_rows = grad_rows is not None
@@ -149,7 +154,7 @@ class ChunkedHeadLoss(torch.autograd.Function):
         grad_hidden = torch.zeros(batch * seq, width, dtype=ctx.hidden_dtype,
                                   device=lab_idx.device)
         if ctx.has_grad_rows:
-            scale = grad_loss.float() / ctx.den
+            scale = grad_loss.float() / ctx.den  # the loss scale of fp16 training arrives here
             grad_hidden[lab_idx] = (grad_rows * scale).to(ctx.hidden_dtype)
         return grad_hidden.view(batch, seq, width), None, None, None, None, None
 
