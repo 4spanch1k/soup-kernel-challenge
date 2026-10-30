@@ -34,6 +34,16 @@ def _embedding_forward(self, input_ids):
                        self.norm_type, self.scale_grad_by_freq, self.sparse).float()
 
 
+def _head_input_to_weight_dtype(module, args):
+    """Outside autocast (a same-process eval) the head would see fp32 hidden states and an fp16
+    weight; autocast casts for us in training, so only fix the case where it is off."""
+    (hidden,) = args[:1]
+    if (torch.is_tensor(hidden) and hidden.dtype != module.weight.dtype
+            and not torch.is_autocast_enabled("cuda")):
+        return (hidden.to(module.weight.dtype),) + tuple(args[1:])
+    return None
+
+
 def compact_tied_embedding(model_core):
     """Compact a frozen, fp32, tied Qwen2 embedding/head when its values round-trip exactly."""
     if getattr(model_core, "_soup_embed16_checked", False):
@@ -64,5 +74,6 @@ def compact_tied_embedding(model_core):
     embedding.weight = compact_weight
     lm_head.weight = compact_weight
     embedding.forward = MethodType(_embedding_forward, embedding)
+    lm_head.register_forward_pre_hook(_head_input_to_weight_dtype)
     del embedding_weight, head_weight
     return True

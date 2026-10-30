@@ -112,3 +112,37 @@ def test_compaction_accepts_separate_parameters_on_the_same_storage():
 
     assert compact_tied_embedding(model)
     assert model.lm_head.weight is model.model.embed_tokens.weight
+
+
+def test_peft_lifecycle_backward_save_and_eval_without_autocast(tmp_path):
+    """The order Soup uses: PEFT wraps the model first, compaction happens at the first training
+    forward, then backward with LoRA dropout, the adapter save, and a plain same-process eval."""
+    import os
+
+    from peft import LoraConfig, get_peft_model
+
+    from solution.embed16 import compact_tied_embedding
+
+    base = make_model()
+    make_fp16_representable(base)
+    model = get_peft_model(base, LoraConfig(r=2, lora_alpha=4, lora_dropout=0.05,
+                                            target_modules=["q_proj", "v_proj"],
+                                            task_type="CAUSAL_LM"))
+    assert compact_tied_embedding(model.get_base_model())
+    embedding = model.get_input_embeddings()(torch.ones((1, 8), dtype=torch.long, device="cuda"))
+    assert embedding.dtype == torch.float32
+
+    ids = torch.randint(0, base.config.vocab_size, (2, 16), device="cuda")
+    model.train()
+    with torch.autocast("cuda", dtype=torch.float16):
+        loss = model(input_ids=ids, labels=ids).loss
+    loss.backward()
+    assert torch.isfinite(loss)
+
+    model.save_pretrained(str(tmp_path))
+    assert os.path.exists(os.path.join(str(tmp_path), "adapter_model.safetensors"))
+
+    model.eval()
+    with torch.no_grad():  # no autocast: the head must still accept the fp32 hidden states
+        logits = model(input_ids=ids).logits
+    assert torch.isfinite(logits.float()).all()
