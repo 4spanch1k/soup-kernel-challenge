@@ -57,3 +57,23 @@ Never download local AI models (user rule).
 2. Seed check of the final code: `python harness/run_task.py --repeats 2 --seed 2026 --out runs_seed2026 && python harness/check_rules.py --result runs_seed2026/result.json`.
 3. Edge batch test with 512-token rows (script in the Codex review notes: Python snippet that writes /tmp/soup_edge512.jsonl, then `--only solution --train-file /tmp/soup_edge512.jsonl`).
 4. Refresh README/SUBMISSION numbers if main changes; keep `solution/` identical to what was measured.
+
+## 8. Codex takeover prompt (paste this into Codex if Claude's limit runs out)
+
+```text
+You are taking over a hackathon project from another AI agent. Repo: https://github.com/4spanch1k/soup-kernel-challenge
+(local clone: /Users/aspanch1k/decentrathon-6.0/soup-kernel-challenge; extra worktrees soup-m/q/s/f/... next to it, see `git worktree list`).
+Read, in this order: AGENTS.md (hard rules, breaking one disqualifies the team), docs/HANDOFF.md on branch origin/x/handoff (state, branches,
+merge decision rule, how to run), README.md (task and results), docs/STARTUP_ANALYSIS.md / docs/FUSED4BIT_NOTES.md if present on the
+experiment branches. The task: make `soup train` (Qwen2.5-1.5B, NF4, LoRA, 64 steps) faster/lighter on a Tesla T4 with our OWN Triton kernels
+without changing the task; main is frozen at the T4-measured code (63.5 s vs 76.4 s base, 5,441 vs 14,345 MiB, 10/10 checks).
+Your job now, in this order:
+1. For each experiment branch in the HANDOFF.md table (m2/embed16-safe, q/varlen-attn, s/startup, c2/fused4bit): read its diff against origin/main,
+   fix bugs by reasoning (nobody can run GPU code on the Mac; the human or the Colab/Kaggle T4 does), keep every change guarded and small.
+   Known fact: q/varlen-attn had a bug (attention.num_heads missing in transformers 5.x) already fixed in commit 401fc2f.
+2. Give the human the exact Colab/Kaggle commands (HANDOFF.md section 5) and apply the merge decision rule (section 4) to the numbers they paste back.
+3. Never merge to main without the human's explicit approval; never download local AI models; never edit harness/, tests/, task/.
+4. Keep README.md/SUBMISSION.md numbers equal to what was actually measured; keep solution/ identical to the measured commit when you finish.
+5. Remaining human-only items: Kaggle phone verification and run, video, presentation, team data, copying the final code to the platform repository.
+Deadline: 2026-10-31 23:59 Astana time.
+```
