@@ -47,7 +47,8 @@ def _launch(x, cos, sin, out_dtype, backward):
     out = torch.empty_like(x, dtype=out_dtype)
     rope_kernel[(batch * seq, heads)](
         x, cos, sin, out, seq, x.stride(0), x.stride(1), x.stride(2), out.stride(0),
-        out.stride(1), out.stride(2), cos.stride(0), cos.stride(1), HALF=dim // 2,
+        out.stride(1), out.stride(2), cos.stride(0) if cos.shape[0] > 1 else 0, cos.stride(1),
+        HALF=dim // 2,
         BACKWARD=backward, num_warps=2)
     return out
 
@@ -71,7 +72,7 @@ def _supported(x, cos, sin):
     dim = x.shape[-1]
     return (x.is_cuda and x.dim() == 4 and x.stride(-1) == 1 and cos.dim() == 3
             and cos.shape == sin.shape and cos.stride() == sin.stride() and cos.stride(-1) == 1
-            and cos.shape[0] == x.shape[0] and cos.shape[1] == x.shape[2] and cos.shape[2] == dim
+            and cos.shape[0] in (1, x.shape[0]) and cos.shape[1] == x.shape[2] and cos.shape[2] == dim
             and dim % 2 == 0 and (dim // 2) & (dim // 2 - 1) == 0 and not cos.requires_grad
             and x.dtype in (torch.float16, torch.float32))
 

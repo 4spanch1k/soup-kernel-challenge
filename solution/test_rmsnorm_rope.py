@@ -60,8 +60,9 @@ def reference_rope(q, k, cos, sin):
     return (q * cos) + (rotate_half(q) * sin), (k * cos) + (rotate_half(k) * sin)
 
 
+@pytest.mark.parametrize("cos_batch", [3, 1])  # 1 is what Qwen2Model passes in training
 @pytest.mark.parametrize("q_dtype", [torch.float16, torch.float32])
-def test_rope_matches_pytorch(q_dtype):
+def test_rope_matches_pytorch(q_dtype, cos_batch):
     from solution.rope import RotaryFunction
 
     torch.manual_seed(0)
@@ -71,7 +72,7 @@ def test_rope_matches_pytorch(q_dtype):
     k_proj = torch.randn(batch, seq, kv_heads * dim, device="cuda", dtype=q_dtype)
     q = q_proj.view(batch, seq, heads, dim).transpose(1, 2).requires_grad_(True)
     k = k_proj.view(batch, seq, kv_heads, dim).transpose(1, 2).requires_grad_(True)
-    freqs = torch.randn(batch, seq, dim // 2, device="cuda")
+    freqs = torch.randn(cos_batch, seq, dim // 2, device="cuda")
     emb = torch.cat((freqs, freqs), dim=-1)
     cos, sin = emb.cos(), emb.sin()  # fp32, like the model under autocast
 
