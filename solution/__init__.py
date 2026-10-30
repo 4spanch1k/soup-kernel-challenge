@@ -16,6 +16,7 @@ The rules in short (the README and the task statement have the full ones):
 from .add_rmsnorm import patch_qwen2_decoder_layer
 from .head_patch import patch_head
 from .layer_tail import patch_qwen2_layer_tail
+from .lora_fuse import patch_lora_fuse
 from .nf4_dequant import patch_bnb_dequantize
 from .recompute import patch_qwen2_mlp_recompute
 from .rmsnorm import patch_qwen2_rmsnorm
@@ -32,3 +33,4 @@ def apply():
     patch_qwen2_layer_tail()  # Fuse the MLP residual with the following norm.
     patch_head()           # A: chunked output head + fused cross-entropy (ce_loss.py)
     patch_bnb_dequantize()  # E: NF4 weight dequantization (nf4_dequant.py)
+    patch_lora_fuse()  # L: LoRA dropout and output fusion, opt-in on T4
