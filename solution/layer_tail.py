@@ -70,24 +70,6 @@ def patch_qwen2_layer_tail():
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
 
-        if not isinstance(attention_mask, dict):
-            mask_kwargs = {
-                "config": self.config,
-                "inputs_embeds": inputs_embeds,
-                "attention_mask": attention_mask,
-                "past_key_values": past_key_values,
-                "position_ids": position_ids,
-            }
-            causal_mask_mapping = {
-                "full_attention": modeling_qwen2.create_causal_mask(**mask_kwargs),
-            }
-            if self.has_sliding_layers:
-                causal_mask_mapping["sliding_attention"] = (
-                    modeling_qwen2.create_sliding_window_causal_mask(**mask_kwargs)
-                )
-        else:
-            causal_mask_mapping = attention_mask
-
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
 
         packed_idx = None
@@ -99,39 +81,115 @@ def patch_qwen2_layer_tail():
             if packed_idx.numel() == 0 or packed_idx.numel() == total_rows:
                 packed_idx = None
 
+        batch, seq, width = inputs_embeds.shape
+        cos, sin = position_embeddings
+        use_varlen_attention = False
+        lens = None
         if packed_idx is not None:
-            batch, seq, width = inputs_embeds.shape
+            use_varlen_attention = (
+                all(layer_type == "full_attention" for layer_type in self.config.layer_types)
+                and all(layer.self_attn.sliding_window is None for layer in self.layers)
+                and cos.shape[0] in (1, batch)
+            )
+            if use_varlen_attention:
+                mask_lens = attention_mask.sum(dim=1)
+                positions = torch.arange(seq, device=attention_mask.device)
+                right_padded = (
+                    attention_mask == (positions[None, :] < mask_lens[:, None]).to(attention_mask.dtype)
+                ).all()
+                # Copy the guard and lengths to the host together so this path syncs only once.
+                packed_info = torch.cat((right_padded.to(torch.int64).view(1),
+                                         mask_lens.to(torch.int64))).tolist()
+                lens = packed_info[1:]
+                use_varlen_attention = packed_info[0] == 1 and all(length > 0 for length in lens)
+
+        if not use_varlen_attention:
+            if not isinstance(attention_mask, dict):
+                mask_kwargs = {
+                    "config": self.config,
+                    "inputs_embeds": inputs_embeds,
+                    "attention_mask": attention_mask,
+                    "past_key_values": past_key_values,
+                    "position_ids": position_ids,
+                }
+                causal_mask_mapping = {
+                    "full_attention": modeling_qwen2.create_causal_mask(**mask_kwargs),
+                }
+                if self.has_sliding_layers:
+                    causal_mask_mapping["sliding_attention"] = (
+                        modeling_qwen2.create_sliding_window_causal_mask(**mask_kwargs)
+                    )
+            else:
+                causal_mask_mapping = attention_mask
+
+        if packed_idx is not None:
             rows = inputs_embeds.reshape(batch * seq, width).index_select(0, packed_idx)
             residual = rows
             layer_input = self.layers[0].input_layernorm(residual)
-            cos, sin = position_embeddings
+
+            if use_varlen_attention:
+                pos = packed_idx.remainder(seq)
+                if cos.shape[0] == 1:
+                    cos_rows = cos[0].index_select(0, pos)
+                    sin_rows = sin[0].index_select(0, pos)
+                else:
+                    cos_rows = cos.reshape(batch * seq, -1).index_select(0, packed_idx)
+                    sin_rows = sin.reshape(batch * seq, -1).index_select(0, packed_idx)
+                cos_rows, sin_rows = cos_rows.unsqueeze(1), sin_rows.unsqueeze(1)
 
             for index, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
                 attention = layer.self_attn
                 q = attention.q_proj(layer_input)
                 k = attention.k_proj(layer_input)
                 v = attention.v_proj(layer_input)
-                q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
-                k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
-                v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
-                q = q.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                k = k.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                v = v.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin)
+                if use_varlen_attention:
+                    heads = attention.num_heads
+                    kv_heads = attention.num_key_value_heads
+                    head_dim = attention.head_dim
+                    q = q.view(-1, heads, 1, head_dim)
+                    k = k.view(-1, kv_heads, 1, head_dim)
+                    q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos_rows, sin_rows)
+                    q, k, v = q.squeeze(2), k.squeeze(2), v.view(-1, kv_heads, head_dim)
+                    dropout = 0.0 if not attention.training else attention.attention_dropout
+                    attn_rows = []
+                    offset = 0
+                    for length in lens:
+                        stop = offset + length
+                        q_i = q[offset:stop].view(1, length, heads, head_dim).transpose(1, 2)
+                        k_i = k[offset:stop].view(1, length, kv_heads, head_dim).transpose(1, 2)
+                        v_i = v[offset:stop].view(1, length, kv_heads, head_dim).transpose(1, 2)
+                        if kv_heads != heads:
+                            repeats = heads // kv_heads
+                            k_i = k_i.repeat_interleave(repeats, dim=1)
+                            v_i = v_i.repeat_interleave(repeats, dim=1)
+                        attn_i = torch.nn.functional.scaled_dot_product_attention(
+                            q_i, k_i, v_i, attn_mask=None, dropout_p=dropout,
+                            scale=attention.scaling, is_causal=True)
+                        attn_rows.append(attn_i.transpose(1, 2).reshape(length, -1))
+                        offset = stop
+                    attn_out = torch.cat(attn_rows, dim=0)
+                else:
+                    q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
+                    k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
+                    v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
+                    q = q.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    k = k.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    v = v.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin)
 
-                attention_interface = modeling_qwen2.ALL_ATTENTION_FUNCTIONS.get_interface(
-                    self.config._attn_implementation, modeling_qwen2.eager_attention_forward)
-                attn_out, _ = attention_interface(
-                    attention,
-                    q,
-                    k,
-                    v,
-                    causal_mask_mapping[self.config.layer_types[index]],
-                    dropout=0.0 if not attention.training else attention.attention_dropout,
-                    scaling=attention.scaling,
-                    sliding_window=attention.sliding_window,
-                )
-                attn_out = attn_out.reshape(batch * seq, -1).index_select(0, packed_idx)
+                    attention_interface = modeling_qwen2.ALL_ATTENTION_FUNCTIONS.get_interface(
+                        self.config._attn_implementation, modeling_qwen2.eager_attention_forward)
+                    attn_out, _ = attention_interface(
+                        attention,
+                        q,
+                        k,
+                        v,
+                        causal_mask_mapping[self.config.layer_types[index]],
+                        dropout=0.0 if not attention.training else attention.attention_dropout,
+                        scaling=attention.scaling,
+                        sliding_window=attention.sliding_window,
+                    )
+                    attn_out = attn_out.reshape(batch * seq, -1).index_select(0, packed_idx)
                 attn_out = attention.o_proj(attn_out)
 
                 mlp_input, residual = _fuse_add_norm(

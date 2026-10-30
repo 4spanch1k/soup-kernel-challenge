@@ -10,8 +10,8 @@ def make_models():
     from transformers import Qwen2Config, Qwen2ForCausalLM
 
     config = Qwen2Config(vocab_size=503, hidden_size=256, intermediate_size=512,
-                         num_hidden_layers=3, num_attention_heads=2,
-                         num_key_value_heads=1, tie_word_embeddings=True,
+                         num_hidden_layers=3, num_attention_heads=4,
+                         num_key_value_heads=2, tie_word_embeddings=True,
                          attention_dropout=0.0, use_cache=False)
     torch.manual_seed(0)
     reference = Qwen2ForCausalLM(config).cuda().train()
@@ -33,27 +33,65 @@ def run_model(model, input_ids, attention_mask, labels):
     return output.loss.detach(), logits, grad
 
 
-@pytest.mark.parametrize("lengths", [(33, 20, 7), (2, 1, 1)])
-def test_packed_forward_matches_original_loss_logits_and_gradient(lengths):
+def test_rope_fallback_supports_packed_rows():
+    from transformers.models.qwen2 import modeling_qwen2
+
+    q = torch.randn(5, 4, 1, 64)
+    k = torch.randn(5, 2, 1, 64)
+    angles = torch.randn(5, 1, 32)
+    emb = torch.cat((angles, angles), dim=-1)
+    cos, sin = emb.cos(), emb.sin()
+    q_out, k_out = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin, unsqueeze_dim=1)
+
+    def rotate_half(value):
+        return torch.cat((-value[..., 32:], value[..., :32]), dim=-1)
+
+    torch.testing.assert_close(q_out, q * cos.unsqueeze(1) + rotate_half(q) * sin.unsqueeze(1))
+    torch.testing.assert_close(k_out, k * cos.unsqueeze(1) + rotate_half(k) * sin.unsqueeze(1))
+
+
+@pytest.mark.parametrize(("lengths", "left_padded"), [
+    ((33, 20, 7), False),
+    ((1, 2, 31), False),
+    ((31, 20, 7), True),
+])
+def test_packed_forward_matches_original_loss_logits_and_gradient(lengths, left_padded):
     from transformers.models.qwen2 import modeling_qwen2
 
     from solution.add_rmsnorm import patch_qwen2_decoder_layer
     from solution.layer_tail import patch_qwen2_layer_tail
     from solution.rmsnorm import patch_qwen2_rmsnorm
+    from solution.rope import _supported, patch_qwen2_rope
 
     reference, packed, config = make_models()
     input_ids = torch.randint(0, config.vocab_size, (3, 33), device="cuda")
     positions = torch.arange(33, device="cuda")[None, :]
-    attention_mask = (positions < torch.tensor(lengths, device="cuda")[:, None]).long()
+    length_tensor = torch.tensor(lengths, device="cuda")[:, None]
+    if left_padded:
+        attention_mask = (positions >= 33 - length_tensor).long()
+    else:
+        attention_mask = (positions < length_tensor).long()
     labels = input_ids.masked_fill(~attention_mask.bool(), -100)
 
     current_forward = modeling_qwen2.Qwen2Model.forward
     original_forward = getattr(current_forward, "_soup_layer_tail_original", current_forward)
     patch_qwen2_rmsnorm()
     patch_qwen2_decoder_layer()
+    patch_qwen2_rope()
     patch_qwen2_layer_tail()
     packed_forward = modeling_qwen2.Qwen2Model.forward
     input_dims = []
+    rotary_shapes = []
+    supported_varlen_rope = []
+    rotary = modeling_qwen2.apply_rotary_pos_emb
+
+    def record_rotary(q, k, cos, sin, unsqueeze_dim=1):
+        rotary_shapes.append(tuple(q.shape))
+        if q.shape[2] == 1:
+            supported_varlen_rope.append(_supported(q, cos, sin) and _supported(k, cos, sin))
+        return rotary(q, k, cos, sin, unsqueeze_dim)
+
+    modeling_qwen2.apply_rotary_pos_emb = record_rotary
     hook = packed.model.layers[0].self_attn.q_proj.register_forward_pre_hook(
         lambda _module, args: input_dims.append(args[0].dim()))
 
@@ -65,8 +103,15 @@ def test_packed_forward_matches_original_loss_logits_and_gradient(lengths):
     finally:
         hook.remove()
         modeling_qwen2.Qwen2Model.forward = packed_forward
+        modeling_qwen2.apply_rotary_pos_emb = rotary
 
     assert input_dims and input_dims[0] == 2
+    if left_padded:
+        assert not supported_varlen_rope
+        assert rotary_shapes[3:] == [(3, 4, 33, 64)] * 3
+    else:
+        assert supported_varlen_rope == [True] * 3
+        assert rotary_shapes[3:] == [(sum(lengths), 4, 1, 64)] * 3
     valid = attention_mask.bool()
     torch.testing.assert_close(logits[valid], ref_logits[valid], rtol=2e-3, atol=2e-3)
     torch.testing.assert_close(loss, ref_loss, rtol=2e-3, atol=2e-3)
