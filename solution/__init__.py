@@ -17,6 +17,7 @@ from .add_rmsnorm import patch_qwen2_decoder_layer
 from .head_patch import patch_head
 from .layer_tail import patch_qwen2_layer_tail
 from .nf4_dequant import patch_bnb_dequantize
+from .fused4bit import patch_fused4bit
 from .recompute import patch_qwen2_mlp_recompute
 from .rmsnorm import patch_qwen2_rmsnorm
 from .rope import patch_qwen2_rope
@@ -32,3 +33,4 @@ def apply():
     patch_qwen2_layer_tail()  # Fuse the MLP residual with the following norm.
     patch_head()           # A: chunked output head + fused cross-entropy (ce_loss.py)
     patch_bnb_dequantize()  # E: NF4 weight dequantization (nf4_dequant.py)
+    patch_fused4bit()  # experimental fused NF4 GEMM; disabled unless explicitly enabled
