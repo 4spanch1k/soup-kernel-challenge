@@ -18,16 +18,17 @@ required fp32 values while writing normalized activations directly in the autoca
 The output head also creates a very large vocabulary-logit tensor. Our head processes token rows
 in chunks, calculates Soup's loss and logged statistics without materializing all logits, and
 keeps the gradients for labelled tokens only. RMSNorm, RoPE, NF4 dequantization, and the
-post-attention residual add plus RMSNorm are also handled by Triton. RMSNorm, RoPE and the fused
-add-plus-norm each have forward and backward kernels; NF4 dequantization is a forward operation.
+residual adds fused with RMSNorm are also handled by Triton. RMSNorm, RoPE and the fused
+add-plus-norm each have forward and backward kernels; NF4 dequantization replaces bitsandbytes'
+dequantization both in the 4-bit matmul forward and in its backward.
 
 | Kernel | File | Replaces | Key idea |
 |---|---|---|---|
 | `head_stats_kernel` | `solution/ce_loss.py`, wired by `solution/head_patch.py` | Full output logits and their loss/metric passes | Project 256 token rows at a time; online log-sum-exp computes cross-entropy, entropy and argmax, then reuses the chunk for the loss gradient. Padding rows are dropped; the hidden gradient is computed chunk by chunk, with the loss scale applied in backward. |
 | `rmsnorm_fwd_kernel`, `rmsnorm_bwd_kernel` | `solution/rmsnorm.py` | Qwen2 RMSNorm's sequence of PyTorch operations | Normalize one row per program with fp32 statistics and save only one reciprocal standard deviation per row. Under autocast, write the consumer dtype directly. |
 | `rope_kernel` | `solution/rope.py` | Qwen2's separate slice, rotate, multiply and add operations for Q and K | Rotate both halves of a head in one forward kernel; apply the inverse rotation in backward. |
-| `nf4_dequant_kernel` | `solution/nf4_dequant.py` | `bitsandbytes.functional.dequantize_4bit` for supported nested NF4 weights | Decode packed nibbles and nested scales with the NF4 lookup table, then write the dequantized values. |
-| `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py` | Post-attention residual addition followed by RMSNorm | Add and normalize in one forward kernel, retaining the fp32 residual and writing the normalized value in the MLP's autocast dtype; combine both gradient paths in backward. |
+| `nf4_dequant_kernel` | `solution/nf4_dequant.py` | bitsandbytes' dequantization (`dequantize_4bit` in backward; the dequantize step of `gemm_4bit` in `MatMul4Bit.forward`) for supported nested NF4 weights | Decode packed nibbles and nested scales with the NF4 lookup table, interleave the two nibbles and write the dequantized fp16 weights in one contiguous store. |
+| `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py`, `solution/layer_tail.py` | Each residual add followed by an RMSNorm: the post-attention add + norm, and the MLP add + the next layer's input norm (or the final norm) | Add and normalize in one forward kernel, retaining the fp32 residual and writing the normalized value in the consumers' autocast dtype; combine both gradient paths in backward. `layer_tail.py` (a replacement of `Qwen2Model.forward` for the training case, with fallback to the original) applies it at layer boundaries. |
 
 The starter kit's `solution/swiglu.py` example remains active. It is not our work and is not
 included in our kernel share.
@@ -51,31 +52,39 @@ included in our kernel share.
 
 These are one base run and one solution run from `harness/run_task.py`, followed by
 `harness/check_rules.py`, on a Google Colab Tesla T4. The measured solution was branch
-`f/add-rmsnorm`, commit `6796e4c`.
+`h/nf4-forward`, commit `1626fe6` (the final code of this repository).
 
 | Metric | Base Soup | Ours | Result |
 |---|---:|---:|---:|
-| Whole `soup train`, seconds | 77.5 | 65.8 | 1.176x speedup in this pair |
+| Whole `soup train`, seconds | 80.9 | 68.2 | 1.185x speedup in this pair |
 | Peak GPU memory, MiB | 14,345 | 6,321 | 2.269x lower |
-| Eval loss | 2.04966 | 2.04948 | -0.009% vs base |
+| Eval loss | 2.04966 | 2.04949 | -0.008% vs base |
 
-All 10 harness checks passed on that Colab T4 run. Our kernels accounted for 6.4% of training time
-(check 4). The loss-curve gap was 0.01% on the first step and 0.04% on average (check 6). Time
-and memory were 0.850x and 0.441x of base (check 8). Soup's 79 regression tests passed with
-`apply()` active (check 10), and all 37 solution tests passed on the T4.
+All 10 harness checks passed on that Colab T4 run. Our kernels accounted for 8.8% of training time
+(check 4). The loss-curve gap was 0.03% on the first step and 0.04% on average (check 6). Time
+and memory were 0.844x and 0.441x of base (check 8). Soup's 79 regression tests passed with
+`apply()` active (check 10), and all 42 solution tests passed on the T4.
 
-Earlier iterations on the same machine measured 75.6 seconds and 8,427 MiB with chunked CE,
-RMSNorm and RoPE; check 4 was 2.9%. Adding NF4 dequantization raised the kernel share to 4.97%,
-still below the limit. Writing RMSNorm output in fp16 under autocast and fusing residual add plus
-norm brought the final share to 6.4%. Base time varied across three Colab runs (80.6, 80.7 and
-77.5 seconds), so the observed speed gain is roughly 1.07x–1.18x, not a stable precise ratio.
+How we got there on the same machine (one run each; base time varied between 77.5 s and 80.9 s):
+
+| Step | Time, s | Peak, MiB | Check 4 |
+|---|---:|---:|---|
+| Chunked CE + RMSNorm + RoPE | 75.6 | 8,427 | 2.9% (fail) |
+| + own NF4 dequantization in backward | 75.7 | 8,427 | 4.97% (fail) |
+| + RMSNorm writes fp16, fused add + post-attention norm | 65.8 | 6,321 | 6.4% |
+| + fused layer boundaries (`layer_tail.py`) | 68.4 | 6,321 | 6.0% |
+| + own NF4 dequantization in the matmul forward (final) | 68.2 | 6,321 | 8.8% |
+
+The layer-boundary fusion did not change the time measurably against run-to-run noise; it stays
+because the final configuration passed all checks with the largest margin. Observed speed gains
+over several base runs are roughly 1.07x to 1.19x, not a stable precise ratio.
 
 ## Limits
 
 - These results are from Colab, not Kaggle. The team's Kaggle account lacks phone verification
   required for GPU and Internet access, so a Kaggle run has not been completed and may differ.
 - Each side has one measured run. The jury uses hidden rows and two runs per side; results can
-  move. Check 4 passed by about 1.4 percentage points, so its margin is limited.
+  move. Check 4 passed by about 3.8 percentage points in the final run.
 - `solution/recompute.py` can recompute MLP activations but is off by default and was not measured.
 - RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
   Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.

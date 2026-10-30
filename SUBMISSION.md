@@ -18,8 +18,8 @@ TODO — add team members, roles, GitHub/Kaggle accounts, and captain contact.
 
 ## Our kernels
 
-Individual kernel shares were not recorded. The combined share for our kernels was 6.4% of
-training time in check 4.
+Individual kernel shares were not recorded. The combined share for our kernels was 8.8% of
+training time in check 4 of the final run.
 
 | Kernel (`@triton.jit` name) | File | What it replaces | Share of training time |
 |---|---|---|---|
@@ -27,8 +27,8 @@ training time in check 4.
 | `rmsnorm_fwd_kernel`, `rmsnorm_bwd_kernel` | `solution/rmsnorm.py` | Qwen2 RMSNorm operations | Not measured individually |
 | `rope_kernel` | `solution/rope.py` | Qwen2 rotary embedding operations | Not measured individually |
 | `nf4_dequant_kernel` | `solution/nf4_dequant.py` | bitsandbytes nested NF4 dequantization | Not measured individually |
-| `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py` | Post-attention residual add and RMSNorm | Not measured individually |
-| **All our kernels** | — | — | **6.4% combined** |
+| `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py`, `solution/layer_tail.py` | Residual adds followed by RMSNorm (post-attention and layer boundaries) | Not measured individually |
+| **All our kernels** | — | — | **8.8% combined** |
 
 The starter kit's `solution/swiglu.py` example remains active but is not our kernel and is not
 counted. The online softmax idea is from Milakov and Gimelshein (2018); the chunked linear
@@ -40,22 +40,22 @@ is not enabled; only its `STEP_ATTR` hand-off name is reused for the rewind reco
 ## Results
 
 One base run and one solution run, measured by `harness/run_task.py` and checked by
-`harness/check_rules.py` on a Google Colab Tesla T4, branch `f/add-rmsnorm`, commit `6796e4c`.
+`harness/check_rules.py` on a Google Colab Tesla T4, branch `h/nf4-forward`, commit `1626fe6`.
 These are Colab results, not Kaggle results.
 
 | Metric | Base Soup | Ours | Ratio / change |
 |---|---:|---:|---:|
-| Whole `soup train`, seconds | 77.5 | 65.8 | 1.176x speedup in this pair |
+| Whole `soup train`, seconds | 80.9 | 68.2 | 1.185x speedup in this pair |
 | Peak GPU memory, MiB | 14,345 | 6,321 | 2.269x lower |
-| Eval loss | 2.04966 | 2.04948 | -0.009% vs base |
+| Eval loss | 2.04966 | 2.04949 | -0.008% vs base |
 
 - [x] All 10 checks of `harness/check_rules.py` passed on the Colab T4 run.
 - [x] `README.md` rewritten for our solution: what we did, how to run it, results and limits.
 
-Check 6's loss-curve gap was 0.01% on the first step and 0.04% on average. Check 8 measured time
-and memory at 0.850x and 0.441x of base. Soup's 79 regression tests passed with `apply()` active;
-all 37 solution tests passed on the T4. Across development runs and base-run variation, the
-observed speed gain was roughly 1.07x–1.18x.
+Check 4: 8.8% of training time. Check 6's loss-curve gap was 0.03% on the first step and 0.04% on
+average. Check 8 measured time and memory at 0.844x and 0.441x of base. Soup's 79 regression
+tests passed with `apply()` active; all 42 solution tests passed on the T4. Across development
+runs and base-run variation (77.5 s to 80.9 s), the observed speed gain was roughly 1.07x-1.19x.
 
 ## Presentation covers
 
@@ -66,7 +66,7 @@ loss, the Colab-versus-Kaggle measurement limit, and next steps.
 
 The measurements are one run per side on Colab, not Kaggle. The team's Kaggle account lacks phone
 verification for GPU and Internet access; the jury's hidden rows and two runs per side may change
-the results. Check 4 passed by about 1.4 percentage points. MLP recomputation is off by default
+the results. Check 4 passed by about 3.8 percentage points in the final run. MLP recomputation is off by default
 and was not measured. RMSNorm outputs fp16 under autocast, with consumer gradients summed in
 fp16; Soup's GradScaler is enabled and the mean loss-curve gap was 0.04%. The kernels use Triton
 3.x features and PyTorch 2.4 or newer APIs.
