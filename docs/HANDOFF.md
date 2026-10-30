@@ -77,3 +77,14 @@ Your job now, in this order:
 5. Remaining human-only items: Kaggle phone verification and run, video, presentation, team data, copying the final code to the platform repository.
 Deadline: 2026-10-31 23:59 Astana time.
 ```
+
+## 9. Experiment log (T4, Colab, 2026-10-31 early morning)
+| Branch | Result | Verdict |
+|---|---|---|
+| `q/varlen-attn` (per-sample causal SDPA on packed rows) | tests 5/5 pass after fixing `attention.num_heads` (commit 401fc2f). A-B-A-B solution-only wall: main 61.8 / 68.0 s, varlen 66.9 / 68.3 s; peak identical 5,441 MiB | NO gain (slightly slower, 3 SDPA launches per layer + repeat_kv); do not merge |
+| `c2/fused4bit` (NF4 decode fused into a Triton GEMM) | kernel matches reference (12 tests pass; one wrapper test fails on a test-side AttributeError) but is 10-200x SLOWER than dequant+cuBLAS on every shape (scripts/bench_gemm4bit.py) | rejected; cuBLAS wins on sm75 as predicted |
+| `s/startup` | scripts/startup_breakdown.py (run with `PYTHONPATH=. python scripts/startup_breakdown.py`): cold Triton compile of ALL our kernels = 4.7 s with an empty cache (first call 1.9 s incl. Triton init; others 0.1-0.5 s each); no recompiles across T=200/311/512. Import torch 1.5 s, transformers+trl+peft+bnb 8.2 s (same for base), apply() 1.1 s | the ~4.7 s compile is the only startup slice we own; its RoPE/embed16 tweaks are marginal, not merged |
+| MLP recompute | +16% time for -27% memory | off |
+| `m2/embed16-safe` | 4 embed16 tests pass on T4; the PEFT lifecycle test needs a peft/torchao-compatible env (skips otherwise) | harmless robustness; merge optional |
+Also measured: wall vs loop: base 76.4 s wall / 54.9 s loop; ours 63.5 / 42.1 (loop includes ~5 s of first-step Triton compile).
+Open idea (rule-ambiguous, needs the user's OK): warm up our kernels in a Python THREAD inside apply() while Soup loads the model (compile is CPU work), hiding ~4.7 s of the wall time. Not a background process and not a cache, but a jury could read it as "background work": decide with the user and document it in README if used.
