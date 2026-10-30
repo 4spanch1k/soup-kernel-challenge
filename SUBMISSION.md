@@ -3,7 +3,7 @@
 ## Links
 
 - Repository: https://github.com/4spanch1k/soup-kernel-challenge
-- Final commit: TODO — add the final commit SHA and commit URL.
+- Final commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16 (`main` after PR #11). `solution/` is byte-identical to commit `29184d9`, the code measured on the T4; only README/SUBMISSION text changed since.
 - Public Kaggle notebook: TODO — add the saved public Kaggle notebook URL (not yet available).
 - Demo video (up to 3 minutes): TODO — add the public video link.
 - Presentation: TODO — add the presentation link.
