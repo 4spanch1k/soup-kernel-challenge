@@ -52,32 +52,41 @@ included in our kernel share.
 
 These are one base run and one solution run from `harness/run_task.py`, followed by
 `harness/check_rules.py`, on a Google Colab Tesla T4. The measured solution was branch
-`h/nf4-forward`, commit `1626fe6` (the final code of this repository).
+`m/embed16`, commit `4749158` (`solution/` of this repository is that code).
 
 | Metric | Base Soup | Ours | Result |
 |---|---:|---:|---:|
-| Whole `soup train`, seconds | 80.9 | 68.2 | 1.185x speedup in this pair |
-| Peak GPU memory, MiB | 14,345 | 6,321 | 2.269x lower |
-| Eval loss | 2.04966 | 2.04949 | -0.008% vs base |
+| Whole `soup train`, seconds | 76.4 | 63.5 | 1.203x speedup in this pair |
+| Peak GPU memory, MiB | 14,345 | 5,441 | 2.636x lower |
+| Eval loss | 2.04965 | 2.04953 | -0.006% vs base |
 
-All 10 harness checks passed on that Colab T4 run. Our kernels accounted for 8.8% of training time
+All 10 harness checks passed on that Colab T4 run. Our kernels accounted for 9.6% of training time
 (check 4). The loss-curve gap was 0.03% on the first step and 0.04% on average (check 6). Time
-and memory were 0.844x and 0.441x of base (check 8). Soup's 79 regression tests passed with
-`apply()` active (check 10), and all 42 solution tests passed on the T4.
+and memory were 0.831x and 0.379x of base (check 8). Soup's 79 regression tests passed with
+`apply()` active (check 10), and all 49 solution tests passed on the T4.
 
-How we got there on the same machine (one run each; base time varied between 77.5 s and 80.9 s):
+How we got there on the same machine (one run each; Colab speed drifts between sessions, base time
+was 75.9 s to 80.9 s, so compare rows by their speedup against the base of the same run):
 
-| Step | Time, s | Peak, MiB | Check 4 |
+| Step | Time, s (base) | Peak, MiB | Check 4 |
 |---|---:|---:|---|
-| Chunked CE + RMSNorm + RoPE | 75.6 | 8,427 | 2.9% (fail) |
-| + own NF4 dequantization in backward | 75.7 | 8,427 | 4.97% (fail) |
-| + RMSNorm writes fp16, fused add + post-attention norm | 65.8 | 6,321 | 6.4% |
-| + fused layer boundaries (`layer_tail.py`) | 68.4 | 6,321 | 6.0% |
-| + own NF4 dequantization in the matmul forward (final) | 68.2 | 6,321 | 8.8% |
+| Chunked CE + RMSNorm + RoPE | 75.6 (80.6) | 8,427 | 2.9% (fail) |
+| + own NF4 dequantization in backward | 75.7 (80.7) | 8,427 | 4.97% (fail) |
+| + RMSNorm writes fp16, fused add + post-attention norm | 65.8 (77.5) | 6,321 | 6.4% |
+| + fused layer boundaries, own NF4 dequantization in the matmul forward | 68.2 (80.9) | 6,321 | 8.8% |
+| + packed layers: padding rows skipped (43% of rows are padding) | 61.1 (75.9) | 6,321 | 10.4% |
+| + tied embedding and head compacted into one exact fp16 table (final) | 63.5 (76.4) | 5,441 | 9.6% |
 
-The layer-boundary fusion did not change the time measurably against run-to-run noise; it stays
-because the final configuration passed all checks with the largest margin. Observed speed gains
-over several base runs are roughly 1.07x to 1.19x, not a stable precise ratio.
+Two patches that are not kernels: `solution/layer_tail.py` runs the decoder stack on the valid
+tokens only and keeps the padded layout just for attention (the rules allow removing padding inside
+a batch), and `solution/embed16.py` replaces the tied fp32 embedding/head (exactly fp16-representable
+because the model is loaded in fp16) by one shared fp16 parameter; the embedding output stays fp32.
+The memory peak is set by the densest batch, which has almost no padding, so packing helps time but
+not peak memory.
+
+MLP recomputation (`solution/recompute.py`, our own `torch.utils.checkpoint`, not Soup's switch) was
+measured on the T4 in one session, solution only: off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB. It
+costs 16% time for 27% memory, so it stays off.
 
 ## Limits
 
@@ -85,7 +94,7 @@ over several base runs are roughly 1.07x to 1.19x, not a stable precise ratio.
   required for GPU and Internet access, so a Kaggle run has not been completed and may differ.
 - Each side has one measured run. The jury uses hidden rows and two runs per side; results can
   move. Check 4 passed by about 3.8 percentage points in the final run.
-- `solution/recompute.py` can recompute MLP activations but is off by default and was not measured.
+- `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16% time for 27% memory in our measurement.
 - RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
   Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.
 - The kernels use Triton 3.x features including `tl.interleave` and `tl.argmax` in loops, and
