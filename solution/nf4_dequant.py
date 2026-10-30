@@ -1,9 +1,12 @@
 """NF4 weight dequantization in Triton, the largest op of the 4-bit base model that was not ours.
 
 Every QLoRA linear layer turns its packed 4-bit weight into fp16 before the matmul, in forward
-and again in backward (28 layers x 7 matrices x 2 per step). bitsandbytes does it with a CUDA
-kernel; here the same function is written in Triton and plugged in by replacing
-`bitsandbytes.functional.dequantize_4bit` (looked up at call time by bnb's own autograd code).
+and again in backward (28 layers x 7 matrices x 2 per step). bitsandbytes does it with CUDA
+kernels; here the same work is written in Triton. Backward calls
+`bitsandbytes.functional.dequantize_4bit`, which is replaced; forward goes through the
+`bitsandbytes::gemm_4bit` op, whose default implementation is "dequantize, then F.linear", so
+`MatMul4Bit.forward` is replaced by the same two steps with our kernel (batch > 1 only; anything
+else keeps bnb's own code).
 
 Format (bitsandbytes 0.50, NF4 with double quantization), read from its source and checked
 against its output in test_nf4_dequant.py:
@@ -93,3 +96,31 @@ def patch_bnb_dequantize():
 
     dequantize_4bit._soup_nf4_patched = True
     bnb_functional.dequantize_4bit = dequantize_4bit
+    patch_bnb_matmul_forward()
+
+
+def patch_bnb_matmul_forward():
+    """MatMul4Bit.forward for the training case: our dequantization, then F.linear, exactly what
+    bnb's default gemm_4bit does (dequantize to A's dtype, `F.linear(A, B_dq, bias)`)."""
+    from bitsandbytes.autograd import _functions
+
+    cls = _functions.MatMul4Bit
+    if getattr(cls.forward, "_soup_nf4_patched", False):
+        return
+    original = cls.forward
+
+    def forward(ctx, A, B, out=None, bias=None, quant_state=None):
+        packed = B.reshape(-1, 1) if quant_state is not None else None
+        if (quant_state is not None and out is None and A.is_cuda and A.numel() > 0
+                and A.dtype == quant_state.dtype and _supported(packed, quant_state, None, None)):
+            ctx.is_empty = False
+            output = torch.nn.functional.linear(A, nf4_dequantize(packed, quant_state), bias)
+            ctx.state = quant_state
+            ctx.dtype_A, ctx.dtype_B = A.dtype, packed.dtype
+            ctx.dtype_bias = None if bias is None else bias.dtype
+            ctx.tensors = (None, packed) if any(ctx.needs_input_grad[:2]) else (None, None)
+            return output
+        return original(ctx, A, B, out, bias, quant_state)
+
+    forward._soup_nf4_patched = True
+    cls.forward = staticmethod(forward)
