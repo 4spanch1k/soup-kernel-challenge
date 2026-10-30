@@ -119,15 +119,18 @@ def test_peft_lifecycle_backward_save_and_eval_without_autocast(tmp_path):
     forward, then backward with LoRA dropout, the adapter save, and a plain same-process eval."""
     import os
 
-    from peft import LoraConfig, get_peft_model
-
     from solution.embed16 import compact_tied_embedding
 
     base = make_model()
     make_fp16_representable(base)
-    model = get_peft_model(base, LoraConfig(r=2, lora_alpha=4, lora_dropout=0.05,
-                                            target_modules=["q_proj", "v_proj"],
-                                            task_type="CAUSAL_LM"))
+    try:
+        from peft import LoraConfig, get_peft_model
+
+        model = get_peft_model(base, LoraConfig(r=2, lora_alpha=4, lora_dropout=0.05,
+                                                target_modules=["q_proj", "v_proj"],
+                                                task_type="CAUSAL_LM"))
+    except ImportError as exc:  # e.g. Colab's preinstalled torchao is too old for this peft
+        pytest.skip(f"peft cannot build a LoRA model in this environment: {exc}")
     assert compact_tied_embedding(model.get_base_model())
     embedding = model.get_input_embeddings()(torch.ones((1, 8), dtype=torch.long, device="cuda"))
     assert embedding.dtype == torch.float32
