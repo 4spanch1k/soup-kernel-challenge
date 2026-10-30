@@ -42,6 +42,23 @@ def test_rmsnorm_matches_pytorch(x_dtype, shape):
     torch.testing.assert_close(weight.grad, ref_w.grad, rtol=1e-3, atol=1e-2)
 
 
+def test_rmsnorm_writes_the_autocast_dtype():
+    from solution.rmsnorm import rmsnorm
+
+    torch.manual_seed(0)
+    x = (torch.randn(3, 41, 1536, device="cuda") * 3).requires_grad_(True)  # fp32 stream
+    weight = torch.rand(1536, device="cuda") + 0.5
+    grad = torch.randn(3, 41, 1536, device="cuda", dtype=torch.float16)
+    ref_x = x.detach().clone().requires_grad_(True)
+    ref = reference_rmsnorm(ref_x, weight, 1e-6).half()
+    ref.backward(grad)
+    out = rmsnorm(x, weight, 1e-6, torch.float16)
+    out.backward(grad)
+    assert out.dtype == torch.float16 and x.grad.dtype == torch.float32
+    torch.testing.assert_close(out, ref, rtol=2e-3, atol=2e-3)
+    torch.testing.assert_close(x.grad, ref_x.grad, rtol=5e-3, atol=5e-3)
+
+
 def test_rmsnorm_frozen_weight_gets_no_grad():
     from solution.rmsnorm import rmsnorm
 

@@ -19,6 +19,8 @@ import torch
 import triton
 import triton.language as tl
 
+from .amp import autocast_dtype
+
 MAX_WIDTH = 16384
 
 
@@ -102,16 +104,6 @@ def add_rmsnorm(residual, delta, weight, eps, y_dtype):
     return AddRMSNormFunction.apply(residual, delta, weight, eps, y_dtype)
 
 
-def _autocast_dtype():
-    try:
-        if torch.is_autocast_enabled("cuda"):
-            return torch.get_autocast_dtype("cuda")
-    except (TypeError, AttributeError):  # older torch: no device argument
-        if torch.is_autocast_enabled():
-            return torch.get_autocast_gpu_dtype()
-    return None
-
-
 def patch_qwen2_decoder_layer():
     """Qwen2DecoderLayer.forward with the add + post-attention norm fused. Training only: eval,
     CPU, another norm class or an unexpected dtype take the original code."""
@@ -138,7 +130,7 @@ def patch_qwen2_decoder_layer():
             hidden_states=hidden_states, attention_mask=attention_mask, position_ids=position_ids,
             past_key_values=past_key_values, use_cache=use_cache,
             position_embeddings=position_embeddings, **kwargs)
-        y_dtype = _autocast_dtype() or torch.promote_types(residual.dtype, norm.weight.dtype)
+        y_dtype = autocast_dtype() or torch.promote_types(residual.dtype, norm.weight.dtype)
         normed, hidden_states = add_rmsnorm(residual, attn_out, norm.weight,
                                             norm.variance_epsilon, y_dtype)
         return hidden_states + self.mlp(normed)

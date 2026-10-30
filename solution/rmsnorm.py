@@ -6,12 +6,20 @@ fp32 intermediates for backward. Here a row is read once, normalised in register
 once; backward keeps only the input (already alive as the residual) and one fp32 `rstd` per row.
 
 Numerics follow the PyTorch module: statistics in fp32, the normalised value rounded to the input
-dtype before the multiplication by the weight, output dtype = promote(input, weight).
+dtype before the multiplication by the weight.
+
+Output dtype: PyTorch returns promote(input, weight) = fp32 here (the residual stream is fp32), and
+every consumer then casts it to fp16 under autocast. Worse, bitsandbytes' Linear4bit returns its
+result in the dtype of its input, so each 4-bit linear used to convert its fp16 result back to
+fp32 ([tokens, 8960] copies in the MLP) and the saved activations were twice as big. With autocast
+on this kernel writes the autocast dtype directly: the same value rounded once at the same place.
 """
 
 import torch
 import triton
 import triton.language as tl
+
+from .amp import autocast_dtype
 
 MAX_WIDTH = 16384  # one program holds a whole row
 
@@ -47,11 +55,11 @@ def rmsnorm_bwd_kernel(dy_ptr, x_ptr, w_ptr, rstd_ptr, dx_ptr, width, BLOCK: tl.
 
 class RMSNormFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, weight, eps):
+    def forward(ctx, x, weight, eps, out_dtype=None):
         shape = x.shape
         x2 = x.reshape(-1, shape[-1]).contiguous()
         rows, width = x2.shape
-        y = torch.empty(rows, width, dtype=torch.promote_types(x.dtype, weight.dtype),
+        y = torch.empty(rows, width, dtype=out_dtype or torch.promote_types(x.dtype, weight.dtype),
                         device=x.device)
         rstd = torch.empty(rows, dtype=torch.float32, device=x.device)
         rmsnorm_fwd_kernel[(rows,)](x2, weight, y, rstd, width, eps,
@@ -72,11 +80,11 @@ class RMSNormFunction(torch.autograd.Function):
         if ctx.needs_input_grad[1]:  # the norms are frozen in this task; kept for correctness
             normed = (x2.float() * rstd[:, None]).to(ctx.x_dtype)
             dweight = (dy2.float() * normed.float()).sum(0).to(weight.dtype)
-        return dx.view(ctx.shape), dweight, None
+        return dx.view(ctx.shape), dweight, None, None
 
 
-def rmsnorm(x, weight, eps):
-    return RMSNormFunction.apply(x, weight, eps)
+def rmsnorm(x, weight, eps, out_dtype=None):
+    return RMSNormFunction.apply(x, weight, eps, out_dtype)
 
 
 def patch_qwen2_rmsnorm():
@@ -94,7 +102,7 @@ def patch_qwen2_rmsnorm():
                 or hidden_states.shape[-1] > MAX_WIDTH or hidden_states.dtype not in
                 (torch.float16, torch.float32)):
             return original(self, hidden_states)
-        return rmsnorm(hidden_states, self.weight, self.variance_epsilon)
+        return rmsnorm(hidden_states, self.weight, self.variance_epsilon, autocast_dtype())
 
     forward._soup_rmsnorm_patched = True
     cls.forward = forward
