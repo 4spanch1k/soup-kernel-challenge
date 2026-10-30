@@ -88,3 +88,10 @@ Deadline: 2026-10-31 23:59 Astana time.
 | `m2/embed16-safe` | 4 embed16 tests pass on T4; the PEFT lifecycle test needs a peft/torchao-compatible env (skips otherwise) | harmless robustness; merge optional |
 Also measured: wall vs loop: base 76.4 s wall / 54.9 s loop; ours 63.5 / 42.1 (loop includes ~5 s of first-step Triton compile).
 Open idea (rule-ambiguous, needs the user's OK): warm up our kernels in a Python THREAD inside apply() while Soup loads the model (compile is CPU work), hiding ~4.7 s of the wall time. Not a background process and not a cache, but a jury could read it as "background work": decide with the user and document it in README if used.
+
+## 10. Robustness check on main (2026-10-31 morning)
+`python harness/run_task.py --repeats 2 --seed 2026 --out runs_seed2026 && python harness/check_rules.py --result runs_seed2026/result.json` on main (29184d9), Colab T4:
+ALL 10 CHECKS PASS. base 80.8 s / 14,339 MiB, ours 66.2 s / 5,419 MiB (x1.221, 2.646x less), eval loss +0.016%, kernels 8.8% (lowest run),
+loss-curve gap <= 0.05%. `w/load-phase` (Codex): no value-preserving saving > 0.5 s in the model-load phase (analysis in that branch,
+docs/LOAD_PHASE_ANALYSIS.md, scripts/load_phase_timeline.py). Decision: the thread-warm-up idea is NOT used (rule risk).
+Remaining ideas by value: LoRA-path fusion (-150..300 MiB, -5..15 ms), nothing else big is known. main is the submission candidate.
