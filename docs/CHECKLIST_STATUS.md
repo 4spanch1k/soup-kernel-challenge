@@ -21,7 +21,7 @@ https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVer
 - [x] Название mononyx, два участника, роли и контакт капитана внесены.
 - [x] @yujio2x и @yokosowe подтверждены как Telegram-контакты, ссылка капитана внесена.
 - [x] Kaggle-аккаунт второго участника: apanch1k, указан капитаном.
-- [ ] Внести GitHub-логины участников после их получения.
+- [x] GitHub-логины внесены: yujio2x — капитан, 4spanch1k — второй участник (@yokosowe).
 
 ## 3. Видео и презентация
 

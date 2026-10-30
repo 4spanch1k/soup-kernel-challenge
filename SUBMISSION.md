@@ -11,13 +11,12 @@
 
 ## Team
 
-Two participants. Telegram handles, roles and Kaggle accounts supplied by the captain.
-GitHub account links have not yet been provided.
+Two participants. Telegram handles, roles, GitHub and Kaggle accounts supplied by the captain.
 
 | Name | Role | GitHub | Kaggle | Contact (captain) |
 |---|---|---|---|---|
-| @yujio2x (Telegram) | Captain, backend developer | Not yet confirmed | https://www.kaggle.com/yujio2x | https://t.me/yujio2x |
-| @yokosowe (Telegram) | Prompt engineer | Not yet confirmed | https://www.kaggle.com/apanch1k | — |
+| @yujio2x (Telegram) | Captain, backend developer | https://github.com/yujio2x | https://www.kaggle.com/yujio2x | https://t.me/yujio2x |
+| @yokosowe (Telegram) | Prompt engineer | https://github.com/4spanch1k | https://www.kaggle.com/apanch1k | — |
 
 ## Our kernels
 
