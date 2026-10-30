@@ -57,6 +57,8 @@ average. Check 8 measured time and memory at 0.831x and 0.379x of base. Soup's 7
 tests passed with `apply()` active; all 49 solution tests passed on the T4. Across development
 runs the speedup against the same-session base was 1.07x-1.24x.
 
+Repeat check, another seed and two runs per side (jury-like): all 10 checks pass; 80.8 s -> 66.2 s (1.221x), 14,339 -> 5,419 MiB (2.646x), eval loss +0.016%, kernels 8.8%.
+
 ## Presentation covers
 
 Describe the optimized operations and kernel ideas, base-versus-solution time and memory, eval

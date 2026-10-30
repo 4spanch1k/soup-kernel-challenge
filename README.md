@@ -88,6 +88,14 @@ MLP recomputation (`solution/recompute.py`, our own `torch.utils.checkpoint`, no
 measured on the T4 in one session, solution only: off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB. It
 costs 16% time for 27% memory, so it stays off.
 
+### Repeat with another seed, two runs per side (the way the jury runs it)
+
+`python harness/run_task.py --repeats 2 --seed 2026`, then `check_rules.py`, on the same code (commit
+`29184d9`), Google Colab Tesla T4. **All 10 checks passed**: base 80.8 s / 14,339 MiB, ours 66.2 s /
+5,419 MiB (1.221x faster, 2.646x less memory), eval loss 2.05134 -> 2.05167 (+0.016%, limit +0.5%),
+our kernels 8.8% of training time in the lowest run, loss-curve gap 0.00-0.01% (first step) and
+0.01-0.05% (mean) in all four extra runs. The result does not depend on the seed we developed with.
+
 ## Limits
 
 - These results are from Colab, not Kaggle. The team's Kaggle account lacks phone verification
