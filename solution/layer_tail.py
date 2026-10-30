@@ -89,6 +89,62 @@ def patch_qwen2_layer_tail():
             causal_mask_mapping = attention_mask
 
         position_embeddings = self.rotary_emb(inputs_embeds, position_ids)
+
+        packed_idx = None
+        if (torch.is_tensor(attention_mask) and attention_mask.dim() == 2
+                and attention_mask.shape == inputs_embeds.shape[:2]
+                and attention_mask.device == inputs_embeds.device):
+            packed_idx = attention_mask.bool().reshape(-1).nonzero().squeeze(1)
+            total_rows = inputs_embeds.shape[0] * inputs_embeds.shape[1]
+            if packed_idx.numel() == 0 or packed_idx.numel() == total_rows:
+                packed_idx = None
+
+        if packed_idx is not None:
+            batch, seq, width = inputs_embeds.shape
+            rows = inputs_embeds.reshape(batch * seq, width).index_select(0, packed_idx)
+            residual = rows
+            layer_input = self.layers[0].input_layernorm(residual)
+            cos, sin = position_embeddings
+
+            for index, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
+                attention = layer.self_attn
+                q = attention.q_proj(layer_input)
+                k = attention.k_proj(layer_input)
+                v = attention.v_proj(layer_input)
+                q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
+                k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
+                v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
+                q = q.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                k = k.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                v = v.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin)
+
+                attention_interface = modeling_qwen2.ALL_ATTENTION_FUNCTIONS.get_interface(
+                    self.config._attn_implementation, modeling_qwen2.eager_attention_forward)
+                attn_out, _ = attention_interface(
+                    attention,
+                    q,
+                    k,
+                    v,
+                    causal_mask_mapping[self.config.layer_types[index]],
+                    dropout=0.0 if not attention.training else attention.attention_dropout,
+                    scaling=attention.scaling,
+                    sliding_window=attention.sliding_window,
+                )
+                attn_out = attn_out.reshape(batch * seq, -1).index_select(0, packed_idx)
+                attn_out = attention.o_proj(attn_out)
+
+                mlp_input, residual = _fuse_add_norm(
+                    residual, attn_out, layer.post_attention_layernorm)
+                mlp_out = layer.mlp(mlp_input)
+                next_norm = (self.layers[index + 1].input_layernorm
+                             if index + 1 < self.config.num_hidden_layers else self.norm)
+                layer_input, residual = _fuse_add_norm(residual, mlp_out, next_norm)
+
+            output = layer_input.new_zeros(batch * seq, width).index_copy(0, packed_idx, layer_input)
+            return modeling_qwen2.BaseModelOutputWithPast(
+                last_hidden_state=output.view(batch, seq, width), past_key_values=None)
+
         residual = inputs_embeds
         layer_input = self.layers[0].input_layernorm(residual)
 

@@ -76,6 +76,10 @@ def patch_forward():
 
     def forward(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
                 inputs_embeds=None, labels=None, use_cache=None, logits_to_keep=0, **kwargs):
+        if self.training and torch.is_grad_enabled():
+            from .embed16 import compact_tied_embedding
+
+            compact_tied_embedding(self)
         if not (_FAST.armed and labels is not None and self.training and logits_to_keep == 0
                 and _head_ok(self)):
             return original(self, input_ids=input_ids, attention_mask=attention_mask,
