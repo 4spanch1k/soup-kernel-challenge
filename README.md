@@ -93,7 +93,7 @@ costs 16% time for 27% memory, so it stays off.
 - These results are from Colab, not Kaggle. The team's Kaggle account lacks phone verification
   required for GPU and Internet access, so a Kaggle run has not been completed and may differ.
 - Each side has one measured run. The jury uses hidden rows and two runs per side; results can
-  move. Check 4 passed by about 3.8 percentage points in the final run.
+  move. Check 4 passed by about 4.6 percentage points in the final run (9.6% against the 5% limit).
 - `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16% time for 27% memory in our measurement.
 - RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
   Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.
