@@ -13,8 +13,12 @@ The rules in short (the README and the task statement have the full ones):
   settings and outputs; no other GPU, no background processes, no tricks with the measurement.
 """
 
+from .rmsnorm import patch_qwen2_rmsnorm
+from .rope import patch_qwen2_rope
 from .swiglu import patch_qwen2_mlp
 
 
 def apply():
     patch_qwen2_mlp()  # the example: works out of the box, does not count as your own kernel
+    patch_qwen2_rmsnorm()  # B: fused RMSNorm (rmsnorm.py)
+    patch_qwen2_rope()     # B: fused rotary embedding (rope.py)
