@@ -143,8 +143,8 @@ def patch_qwen2_layer_tail():
                 k = attention.k_proj(layer_input)
                 v = attention.v_proj(layer_input)
                 if use_varlen_attention:
-                    heads = attention.num_heads
-                    kv_heads = attention.num_key_value_heads
+                    heads = self.config.num_attention_heads
+                    kv_heads = self.config.num_key_value_heads
                     head_dim = attention.head_dim
                     q = q.view(-1, heads, 1, head_dim)
                     k = k.view(-1, kv_heads, 1, head_dim)
