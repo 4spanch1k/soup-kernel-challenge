@@ -16,12 +16,11 @@ import triton.language as tl
 
 
 @triton.jit
-def rope_kernel(x_ptr, cos_ptr, sin_ptr, out_ptr, seq, sxb, sxh, sxt, sob, soh, sot, scb, sct,
+def rope_kernel(x_ptr, cos_ptr, sin_ptr, out_ptr, sxb, sxh, sxt, sob, soh, sot, scb, sct,
                 HALF: tl.constexpr, BACKWARD: tl.constexpr):
-    token = tl.program_id(0)
+    pos = tl.program_id(0).to(tl.int64)
     head = tl.program_id(1)
-    batch = (token // seq).to(tl.int64)
-    pos = (token % seq).to(tl.int64)
+    batch = tl.program_id(2).to(tl.int64)
     offs = tl.arange(0, HALF)
     src = x_ptr + batch * sxb + head * sxh + pos * sxt
     dst = out_ptr + batch * sob + head * soh + pos * sot
@@ -45,8 +44,9 @@ def rope_kernel(x_ptr, cos_ptr, sin_ptr, out_ptr, seq, sxb, sxh, sxt, sob, soh, 
 def _launch(x, cos, sin, out_dtype, backward):
     batch, heads, seq, dim = x.shape
     out = torch.empty_like(x, dtype=out_dtype)
-    rope_kernel[(batch * seq, heads)](
-        x, cos, sin, out, seq, x.stride(0), x.stride(1), x.stride(2), out.stride(0),
+    # Keep sequence length in the grid to avoid specializing and dividing by it in the kernel.
+    rope_kernel[(seq, heads, batch)](
+        x, cos, sin, out, x.stride(0), x.stride(1), x.stride(2), out.stride(0),
         out.stride(1), out.stride(2), cos.stride(0) if cos.shape[0] > 1 else 0, cos.stride(1),
         HALF=dim // 2,
         BACKWARD=backward, num_warps=2)

@@ -22,9 +22,9 @@ def _is_exact_fp16(weight):
     rows_per_chunk = max(1, _CHECK_ELEMENTS // weight.shape[1])
     for start in range(0, weight.shape[0], rows_per_chunk):
         chunk = weight[start:start + rows_per_chunk]
-        if not torch.isfinite(chunk).all().item():
-            return False
-        if not torch.equal(chunk.half().float(), chunk):
+        finite = torch.isfinite(chunk).all()
+        exact = torch.eq(chunk.half().float(), chunk).all()
+        if not (finite & exact).item():
             return False
     return True
 
