@@ -50,7 +50,7 @@ def _head_weight(lm_head, dtype):
     weight = lm_head.weight
     if weight.dtype == dtype:
         return weight
-    key = (weight.data_ptr(), weight._version, dtype)
+    key = (weight.data_ptr(), weight._version, dtype, weight.device)
     cached = _WEIGHT_CACHE.get("w")
     if cached is None or cached[0] != key:
         _WEIGHT_CACHE["w"] = (key, weight.detach().to(dtype))
@@ -118,7 +118,7 @@ def _log_metrics(trainer, inputs, step):
     attention_mask = inputs["attention_mask"]
     gather = trainer.accelerator.gather_for_metrics
     with torch.no_grad():
-        entropy = (step.token_entropy * attention_mask).sum() / attention_mask.sum()
+        entropy = (step.token_entropy * attention_mask).sum() / attention_mask.sum().clamp(min=1)
         metrics["entropy"].append(gather(entropy).mean().item())
         trainer._total_train_tokens += gather(attention_mask.sum()).sum().item()
         metrics["num_tokens"] = [trainer._total_train_tokens]
@@ -138,6 +138,8 @@ def _eligible(trainer, model, inputs):
                 and trainer.model.training and "labels" in inputs and "attention_mask" in inputs
                 and "shift_labels" not in inputs and not trainer.args.use_liger_kernel
                 and trainer.compute_loss_func is None and trainer.label_smoother is None
+                and not getattr(trainer, "aux_loss_enabled", False)
+                and getattr(inputs["attention_mask"], "dim", lambda: 0)() == 2
                 and getattr(trainer, "num_virtual_tokens", 0) == 0)
     except Exception:  # noqa: BLE001 - anything unexpected (fake modules in tests): no fast path
         return False

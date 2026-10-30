@@ -77,6 +77,44 @@ def test_padding_and_prompt_positions_get_no_gradient():
     assert torch.all(h.grad[shifted >= 0].abs().sum(-1) > 0)
 
 
+def test_backward_with_fp16_loss_scale():
+    """GradScaler multiplies the loss by 65536 before backward: the scale must reach the hidden
+    gradient exactly once and the fp16 matmul must not overflow."""
+    from solution.ce_loss import chunked_head_loss
+
+    hidden, weight, labels, mask = make_case()
+    den = 41.0
+    _, _, _, _, _, ref_grad = reference(hidden, weight, labels, mask, den)
+    h = hidden.clone().requires_grad_(True)
+    loss = chunked_head_loss(h, weight, labels, mask, torch.tensor(den, device="cuda"), chunk=16)[0]
+    (loss * 65536.0).backward()
+    assert torch.isfinite(h.grad).all()
+    expected = 65536.0 * ref_grad
+    assert (h.grad - expected).abs().max() <= 2e-2 * expected.abs().max()
+
+
+@pytest.mark.parametrize("denominator", [0.0, 0])
+def test_zero_denominator_gives_zero_not_nan(denominator):
+    from solution.ce_loss import chunked_head_loss
+
+    hidden, weight, labels, mask = make_case()
+    h = hidden.clone().requires_grad_(True)
+    loss = chunked_head_loss(h, weight, torch.full_like(labels, -100), mask, denominator)[0]
+    loss.backward()
+    assert float(loss) == 0.0 and torch.isfinite(h.grad).all()
+
+
+def test_one_token_rows_have_no_target():
+    from solution.ce_loss import chunked_head_loss
+
+    hidden, weight, labels, _ = make_case(batch=2, seq=1)
+    h = hidden.clone().requires_grad_(True)
+    one = torch.ones(2, 1, dtype=torch.long, device="cuda")
+    loss, entropy, token_loss, correct, labelled = chunked_head_loss(h, weight, labels, one, None)
+    loss.backward()
+    assert float(loss) == 0.0 and int(labelled) == 0 and torch.all(entropy > 0)
+
+
 def test_no_labels_in_batch():
     from solution.ce_loss import chunked_head_loss
 
