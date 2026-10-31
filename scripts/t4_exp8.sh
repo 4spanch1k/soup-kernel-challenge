@@ -14,8 +14,12 @@ run_case() {
     local varlen=0
     local status=0
 
+    local adapt=0
+    if [[ "$variant" == ADAPT ]]; then
+        adapt=1100
+    fi
     if [[ "$variant" == COMBO ]]; then
-        warm=1
+        warm=0  # warm-up thread measured on T4: no gain beyond noise, left out
         fprint=0  # fixed Dataset.map fingerprint: judged doubtful by review, kept out of the combo
         merge_variants=1
         varlen=1
@@ -27,7 +31,7 @@ run_case() {
     SOUP_X_FPRINT="$fprint" \
     SOUP_X_MERGE_VARIANTS="$merge_variants" \
     SOUP_X_VARLEN="$varlen" \
-    SOUP_X_ADAPT_RECOMP=0 \
+    SOUP_X_ADAPT_RECOMP="$adapt" \
     SOUP_X_LORA=0 \
     SOUP_RECOMPUTE_MLP=0 \
         python -u harness/run_task.py --only solution --out "$out" || status=$?
@@ -58,5 +62,7 @@ run_case A1 A || failed=1
 run_case COMBO1 COMBO || failed=1
 run_case A2 A || failed=1
 run_case COMBO2 COMBO || failed=1
+run_case ADAPT1 ADAPT || failed=1
+run_case A3 A || failed=1
 echo "=== done ==="
 exit "$failed"
