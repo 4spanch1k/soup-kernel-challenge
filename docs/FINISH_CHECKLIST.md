@@ -20,7 +20,7 @@
 - Презентация: https://pitch.com/v/soup-kernel-challenge-mononyx-wbjvqz
 - Видео 2:56: https://github.com/4spanch1k/soup-kernel-challenge/releases/download/mononyx-demo-2026-10-31/mononyx-demo.mp4
 - Видео собрано из слайдов Pitch и реальных снимков Kaggle-лога; русская озвучка — системный голос macOS Milena, без клонирования голоса участника.
-- В `README.md` и `SUBMISSION.md` нет `TODO`; публичные ссылки отвечают HTTP 200 в запросах без cookies.
+- В `README.md` и `SUBMISSION.md` нет `TODO`. Pitch и video ссылки ответили HTTP 200 без cookies; Kaggle URL сохранённой версии вернул HTTP 404 без cookies, поэтому публичный доступ к ноутбуку не подтверждён.
 - `solution/` не менялся после измеренного кода; полный MP4 проверен декодированием, длительность — 176 секунд.
 
 ## Что осталось подтвердить капитану
