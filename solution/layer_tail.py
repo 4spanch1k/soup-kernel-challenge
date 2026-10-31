@@ -184,16 +184,24 @@ def patch_qwen2_layer_tail():
         residual = inputs_embeds
         layer_input = self.layers[0].input_layernorm(residual)
         exact_residual = os.environ.get("SOUP_X_EXACT_RESID") == "1"
+        dense_checkpoint = os.environ.get("SOUP_X_DENSE_CKPT") == "1"
 
         for index, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
-            attn_out, _ = layer.self_attn(
-                hidden_states=layer_input,
-                attention_mask=causal_mask_mapping[self.config.layer_types[index]],
-                position_ids=position_ids,
-                past_key_values=None,
-                use_cache=False,
-                position_embeddings=position_embeddings,
-            )
+            layer_mask = causal_mask_mapping[self.config.layer_types[index]]
+
+            def run_dense_attention(hidden, layer=layer, layer_mask=layer_mask):
+                out, _ = layer.self_attn(
+                    hidden_states=hidden,
+                    attention_mask=layer_mask,
+                    position_ids=position_ids,
+                    past_key_values=None,
+                    use_cache=False,
+                    position_embeddings=position_embeddings,
+                )
+                return out
+
+            attn_out = _call_with_checkpoint(run_dense_attention, layer_input,
+                                             enabled=dense_checkpoint)
             mlp_input, residual = _fuse_add_norm(residual, attn_out, layer.post_attention_layernorm)
             mlp_out = layer.mlp(mlp_input)
             next_norm = (self.layers[index + 1].input_layernorm
