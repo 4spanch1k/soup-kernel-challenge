@@ -10,9 +10,9 @@ import torch.nn.functional as F
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU")
 
 
-def make_case(batch=3, seq=37, width=64, vocab=5003, seed=0):
+def make_case(batch=3, seq=37, width=64, vocab=5003, seed=0, hidden_dtype=torch.float32):
     torch.manual_seed(seed)
-    hidden = torch.randn(batch, seq, width, device="cuda")
+    hidden = torch.randn(batch, seq, width, device="cuda", dtype=hidden_dtype)
     weight = (torch.randn(vocab, width, device="cuda") * 0.05).half()
     lengths = torch.tensor([seq, seq - 9, 5], device="cuda")[:batch]
     mask = (torch.arange(seq, device="cuda")[None, :] < lengths[:, None]).long()
@@ -44,10 +44,17 @@ def reference(hidden, weight, labels, mask, den):
 
 @pytest.mark.parametrize("chunk", [7, 256])
 @pytest.mark.parametrize("den", [None, 41.0])
-def test_chunked_head_matches_pytorch(chunk, den):
+@pytest.mark.parametrize("merge_variants", [False, True])
+@pytest.mark.parametrize("hidden_dtype", [torch.float16, torch.float32])
+def test_chunked_head_matches_pytorch(chunk, den, merge_variants, hidden_dtype, monkeypatch):
     from solution.ce_loss import chunked_head_loss
 
-    hidden, weight, labels, mask = make_case()
+    if merge_variants:
+        monkeypatch.setenv("SOUP_X_MERGE_VARIANTS", "1")
+    else:
+        monkeypatch.delenv("SOUP_X_MERGE_VARIANTS", raising=False)
+
+    hidden, weight, labels, mask = make_case(hidden_dtype=hidden_dtype)
     ref_loss, ref_entropy, ref_token_loss, ref_correct, ref_lab, ref_grad = reference(
         hidden, weight, labels, mask, den)
 

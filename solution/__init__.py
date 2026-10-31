@@ -16,18 +16,23 @@ The rules in short (the README and the task statement have the full ones):
 from .add_rmsnorm import patch_qwen2_decoder_layer
 from .head_patch import patch_head
 from .layer_tail import patch_qwen2_layer_tail
+from .lora_path import patch_lora_linear4bit
 from .nf4_dequant import patch_bnb_dequantize
-from .recompute import patch_qwen2_mlp_recompute
+from .recompute import patch_qwen2_mlp_adaptive_recompute, patch_qwen2_mlp_recompute
 from .rmsnorm import patch_qwen2_rmsnorm
 from .rope import patch_qwen2_rope
+from .sft_fingerprint import patch_sft_dataset_map
 from .swiglu import patch_qwen2_mlp
 from .warm import start_warm_thread
 
 
 def apply():
     start_warm_thread()  # compile our kernels in a thread while Soup loads the model (warm.py)
+    patch_lora_linear4bit()
+    patch_sft_dataset_map()
     patch_qwen2_mlp()  # the example: works out of the box, does not count as your own kernel
     patch_qwen2_mlp_recompute()  # C: MLP recomputation, off unless enabled (recompute.py)
+    patch_qwen2_mlp_adaptive_recompute()  # recompute only dense batches, off unless enabled
     patch_qwen2_rmsnorm()  # B: fused RMSNorm (rmsnorm.py)
     patch_qwen2_rope()     # B: fused rotary embedding (rope.py)
     patch_qwen2_decoder_layer()  # F: residual add + norm fused (add_rmsnorm.py)
