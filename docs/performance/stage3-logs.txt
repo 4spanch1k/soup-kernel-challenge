@@ -1,0 +1,316 @@
+8.2s 1 0.00s - Debugger warning: It seems that frozen modules are being used, which may
+8.2s 2 0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+8.2s 3 0.00s - to python to disable frozen modules.
+8.2s 4 0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+8.8s 5 0.00s - Debugger warning: It seems that frozen modules are being used, which may
+8.8s 6 0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+8.8s 7 0.00s - to python to disable frozen modules.
+8.8s 8 0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+10.0s 9 Cloning into '/kaggle/working/stage3'...
+10.2s 10 Cloning into '/kaggle/working/stage3'...
+10.2s 11 
+10.2s 12 Cloning into '/kaggle/working/stage3'...
+10.8s 13 f37be60 Screen owning LoRA outputs and independent int4 activation storage on T4
+11.0s 14 f37be60 Screen owning LoRA outputs and independent int4 activation storage on T4
+18.8s 15 Tesla T4, 0 MiB
+18.8s 16 Tesla T4, 0 MiB
+19.0s 17 Tesla T4, 0 MiB
+19.0s 18 Tesla T4, 0 MiB
+27.3s 19 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+27.3s 20 Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 52201 examples [00:01, 28256.83 examples/s]Generating train split: 52201 examples [00:01, 27996.57 examples/s]
+27.3s 21 wrote 256 training rows and 256 eval rows to /kaggle/working/stage3/data
+27.3s 22 === our kernel tests ===
+27.5s 23 Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+27.5s 24 Generating train split: 0 examples [00:00, ? examples/s]Generating train split: 52201 examples [00:01, 28256.83 examples/s]Generating train split: 52201 examples [00:01, 27996.57 examples/s]
+27.5s 25 wrote 256 training rows and 256 eval rows to /kaggle/working/stage3/data
+27.5s 26 === our kernel tests ===
+88.2s 27 ..............................................................F
+88.2s 28 =================================== FAILURES ===================================
+88.2s 29 ______ test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0] ______
+88.2s 30 
+88.2s 31 monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d5449637e50>
+88.2s 32 dtype = torch.float16, shape = (11, 128), with_bias = False
+88.2s 33 
+88.2s 34 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+88.2s 35 @pytest.mark.parametrize("shape", [(11, 128), (2, 7, 128)])
+88.2s 36 @pytest.mark.parametrize("with_bias", [False, True])
+88.2s 37 def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, with_bias):
+88.2s 38 import bitsandbytes as bnb
+88.2s 39 from peft.tuners.lora.bnb import Linear4bit
+88.2s 40 
+88.2s 41 from solution.lora_path import patch_lora_linear4bit
+88.2s 42 from solution.nf4_dequant import patch_bnb_dequantize
+88.2s 43 
+88.2s 44 original = getattr(Linear4bit.forward, "_soup_x_lora_original", Linear4bit.forward)
+88.2s 45 monkeypatch.setattr(Linear4bit, "forward", original)
+88.2s 46 patch_bnb_dequantize()
+88.2s 47 
+88.2s 48 torch.manual_seed(41)
+88.2s 49 base = bnb.nn.Linear4bit(128, 96, bias=with_bias, compute_dtype=torch.float16,
+88.2s 50 compress_statistics=True, quant_type="nf4").half().cuda()
+88.2s 51 base.requires_grad_(False)
+88.2s 52 >       layer = Linear4bit(base, "default", r=16, lora_alpha=8, lora_dropout=0.05,
+88.2s 53 init_lora_weights=True, use_dora=False).cuda().train()
+88.2s 54 E       TypeError: Linear4bit.__init__() missing 1 required positional argument: 'config'
+88.2s 55 
+88.2s 56 solution/test_lora_output_storage.py:72: TypeError
+88.2s 57 =============================== warnings summary ===============================
+88.2s 58 solution/test_ce_loss.py::test_zero_denominator_gives_zero_not_nan[0.0]
+88.2s 59 /kaggle/working/stage3/solution/test_ce_loss.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+88.2s 60 Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+88.2s 61 assert float(loss) == 0.0 and torch.isfinite(h.grad).all()
+88.2s 62 
+88.2s 63 solution/test_lora_output_storage.py: 14 warnings
+88.2s 64 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+88.2s 65 warnings.warn(
+88.2s 66 
+88.2s 67 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+88.2s 68 =========================== short test summary info ============================
+88.2s 69 FAILED solution/test_lora_output_storage.py::test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0]
+88.2s 70 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+88.2s 71 1 failed, 62 passed, 15 warnings in 53.46s
+88.4s 72 === soup regression tests with apply() ===
+88.4s 73 ..............................................................F
+88.4s 74 =================================== FAILURES ===================================
+88.4s 75 ______ test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0] ______
+88.4s 76 
+88.4s 77 monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7d5449637e50>
+88.4s 78 dtype = torch.float16, shape = (11, 128), with_bias = False
+88.4s 79 
+88.4s 80 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+88.4s 81 @pytest.mark.parametrize("shape", [(11, 128), (2, 7, 128)])
+88.4s 82 @pytest.mark.parametrize("with_bias", [False, True])
+88.4s 83 def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, with_bias):
+88.4s 84 import bitsandbytes as bnb
+88.4s 85 from peft.tuners.lora.bnb import Linear4bit
+88.4s 86 
+88.4s 87 from solution.lora_path import patch_lora_linear4bit
+88.4s 88 from solution.nf4_dequant import patch_bnb_dequantize
+88.4s 89 
+88.4s 90 original = getattr(Linear4bit.forward, "_soup_x_lora_original", Linear4bit.forward)
+88.4s 91 monkeypatch.setattr(Linear4bit, "forward", original)
+88.4s 92 patch_bnb_dequantize()
+88.4s 93 
+88.4s 94 torch.manual_seed(41)
+88.4s 95 base = bnb.nn.Linear4bit(128, 96, bias=with_bias, compute_dtype=torch.float16,
+88.4s 96 compress_statistics=True, quant_type="nf4").half().cuda()
+88.4s 97 base.requires_grad_(False)
+88.4s 98 >       layer = Linear4bit(base, "default", r=16, lora_alpha=8, lora_dropout=0.05,
+88.4s 99 init_lora_weights=True, use_dora=False).cuda().train()
+88.4s 100 E       TypeError: Linear4bit.__init__() missing 1 required positional argument: 'config'
+88.4s 101 
+88.4s 102 solution/test_lora_output_storage.py:72: TypeError
+88.4s 103 =============================== warnings summary ===============================
+88.4s 104 solution/test_ce_loss.py::test_zero_denominator_gives_zero_not_nan[0.0]
+88.4s 105 /kaggle/working/stage3/solution/test_ce_loss.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+88.4s 106 Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+88.4s 107 assert float(loss) == 0.0 and torch.isfinite(h.grad).all()
+88.4s 108 
+88.4s 109 solution/test_lora_output_storage.py: 14 warnings
+88.4s 110 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+88.4s 111 warnings.warn(
+88.4s 112 
+88.4s 113 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+88.4s 114 =========================== short test summary info ============================
+88.4s 115 FAILED solution/test_lora_output_storage.py::test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0]
+88.4s 116 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+88.4s 117 1 failed, 62 passed, 15 warnings in 53.46s
+88.4s 118 === soup regression tests with apply() ===
+107.3s 119 ........................................................................ [ 91%]
+107.3s 120 .......                                                                  [100%]
+107.3s 121 =============================== warnings summary ===============================
+107.3s 122 ../../../usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: 14 warnings
+107.3s 123 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+107.3s 124 warnings.warn(
+107.3s 125 
+107.3s 126 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+107.3s 127 79 passed, 14 warnings in 0.47s
+107.5s 128 ........................................................................ [ 91%]
+107.5s 129 .......                                                                  [100%]
+107.5s 130 =============================== warnings summary ===============================
+107.5s 131 ../../../usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: 14 warnings
+107.5s 132 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+107.5s 133 warnings.warn(
+107.5s 134 
+107.5s 135 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+107.5s 136 79 passed, 14 warnings in 0.47s
+120.8s 137 ........FF
+120.8s 138 =================================== FAILURES ===================================
+120.8s 139 ______ test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0] ______
+120.8s 140 
+120.8s 141 monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7bbc21a1fac0>
+120.8s 142 dtype = torch.float16, shape = (11, 128), with_bias = False
+120.8s 143 
+120.8s 144 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+120.8s 145 @pytest.mark.parametrize("shape", [(11, 128), (2, 7, 128)])
+120.8s 146 @pytest.mark.parametrize("with_bias", [False, True])
+120.8s 147 def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, with_bias):
+120.8s 148 import bitsandbytes as bnb
+120.8s 149 from peft.tuners.lora.bnb import Linear4bit
+120.8s 150 
+120.8s 151 from solution.lora_path import patch_lora_linear4bit
+120.8s 152 from solution.nf4_dequant import patch_bnb_dequantize
+120.8s 153 
+120.8s 154 original = getattr(Linear4bit.forward, "_soup_x_lora_original", Linear4bit.forward)
+120.8s 155 monkeypatch.setattr(Linear4bit, "forward", original)
+120.8s 156 patch_bnb_dequantize()
+120.8s 157 
+120.8s 158 torch.manual_seed(41)
+120.8s 159 base = bnb.nn.Linear4bit(128, 96, bias=with_bias, compute_dtype=torch.float16,
+120.8s 160 compress_statistics=True, quant_type="nf4").half().cuda()
+120.8s 161 base.requires_grad_(False)
+120.8s 162 >       layer = Linear4bit(base, "default", r=16, lora_alpha=8, lora_dropout=0.05,
+120.8s 163 init_lora_weights=True, use_dora=False).cuda().train()
+120.8s 164 E       TypeError: Linear4bit.__init__() missing 1 required positional argument: 'config'
+120.8s 165 
+120.8s 166 solution/test_lora_output_storage.py:72: TypeError
+120.8s 167 =============================== warnings summary ===============================
+120.8s 168 solution/test_lora_output_storage.py: 14 warnings
+120.8s 169 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+120.8s 170 warnings.warn(
+120.8s 171 
+120.8s 172 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+120.8s 173 =========================== short test summary info ============================
+120.8s 174 FAILED solution/test_lora_output_storage.py::test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0]
+120.8s 175 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+120.8s 176 1 failed, 4 passed, 14 warnings in 11.15s
+121.0s 177 
+121.0s 178 =================================== FAILURES ===================================
+121.0s 179 ______ test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0] ______
+121.0s 180 
+121.0s 181 monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7bbc21a1fac0>
+121.0s 182 dtype = torch.float16, shape = (11, 128), with_bias = False
+121.0s 183 
+121.0s 184 @pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+121.0s 185 @pytest.mark.parametrize("shape", [(11, 128), (2, 7, 128)])
+121.0s 186 @pytest.mark.parametrize("with_bias", [False, True])
+121.0s 187 def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, with_bias):
+121.0s 188 import bitsandbytes as bnb
+121.0s 189 from peft.tuners.lora.bnb import Linear4bit
+121.0s 190 
+121.0s 191 from solution.lora_path import patch_lora_linear4bit
+121.0s 192 from solution.nf4_dequant import patch_bnb_dequantize
+121.0s 193 
+121.0s 194 original = getattr(Linear4bit.forward, "_soup_x_lora_original", Linear4bit.forward)
+121.0s 195 monkeypatch.setattr(Linear4bit, "forward", original)
+121.0s 196 patch_bnb_dequantize()
+121.0s 197 
+121.0s 198 torch.manual_seed(41)
+121.0s 199 base = bnb.nn.Linear4bit(128, 96, bias=with_bias, compute_dtype=torch.float16,
+121.0s 200 compress_statistics=True, quant_type="nf4").half().cuda()
+121.0s 201 base.requires_grad_(False)
+121.0s 202 >       layer = Linear4bit(base, "default", r=16, lora_alpha=8, lora_dropout=0.05,
+121.0s 203 init_lora_weights=True, use_dora=False).cuda().train()
+121.0s 204 E       TypeError: Linear4bit.__init__() missing 1 required positional argument: 'config'
+121.0s 205 
+121.0s 206 solution/test_lora_output_storage.py:72: TypeError
+121.0s 207 =============================== warnings summary ===============================
+121.0s 208 solution/test_lora_output_storage.py: 14 warnings
+121.0s 209 /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+121.0s 210 warnings.warn(
+121.0s 211 
+121.0s 212 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+121.0s 213 =========================== short test summary info ============================
+121.0s 214 FAILED solution/test_lora_output_storage.py::test_real_peft_lora_no_clone_matches_original[False-shape0-dtype0]
+121.0s 215 !!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+121.0s 216 1 failed, 4 passed, 14 warnings in 11.15s
+134.3s 217 .........................................                                                    [100%].                                                    [100%]
+134.3s 218 21 passed in 9.92s
+134.5s 219 
+134.5s 220 21 passed in 9.92s
+141.3s 221 ..                                                                       [100%]..                                                                       [100%]
+141.3s 222 2 passed in 4.22s
+141.5s 223 
+141.5s 224 2 passed in 4.22s
+142.1s 225 STAGE3_TESTS {"lora": 1, "codec": 0, "norm": 0}
+142.1s 226 STAGE3_START control1 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1'}
+142.3s 227 STAGE3_TESTS {"lora": 1, "codec": 0, "norm": 0}
+142.3s 228 STAGE3_START control1 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1'}
+166.9s 229 [run_task] warm-up done in 23.63 s
+166.9s 230 [run_task] solution_1: training ...
+167.1s 231 [run_task] warm-up done in 23.63 s
+167.1s 232 [run_task] solution_1: training ...
+242.6s 233 [run_task] solution_1: ok, 75.59 s, peak 4323 MiB
+242.6s 234 [run_task] eval solution ...
+242.8s 235 [run_task] solution_1: ok, 75.59 s, peak 4323 MiB
+242.8s 236 [run_task] eval solution ...
+286.5s 237 
+286.5s 238 === result ===
+286.5s 239 solution  time     75.6 s   peak   4323 MiB   eval loss 2.04948
+286.5s 240 written: /kaggle/working/stage3/runs_stage3/control1/result.json
+286.6s 241 STAGE3_RESULT {"name": "control1", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 75.59, "gpu_peak_mib": 4323, "train_loop_s": 41.36, "eval_loss": 2.04948}
+286.6s 242 STAGE3_START startup {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1', 'SOUP_X_FPRINT': '1', 'SOUP_X_MERGE_VARIANTS': '1'}
+286.8s 243 
+286.8s 244 === result ===
+286.8s 245 solution  time     75.6 s   peak   4323 MiB   eval loss 2.04948
+286.8s 246 written: /kaggle/working/stage3/runs_stage3/control1/result.json
+286.8s 247 STAGE3_RESULT {"name": "control1", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 75.59, "gpu_peak_mib": 4323, "train_loop_s": 41.36, "eval_loss": 2.04948}
+286.8s 248 STAGE3_START startup {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1', 'SOUP_X_FPRINT': '1', 'SOUP_X_MERGE_VARIANTS': '1'}
+301.3s 249 [run_task] warm-up done in 13.79 s
+301.3s 250 [run_task] solution_1: training ...
+301.5s 251 [run_task] warm-up done in 13.79 s
+301.5s 252 [run_task] solution_1: training ...
+366.2s 253 [run_task] solution_1: ok, 64.85 s, peak 4323 MiB
+366.2s 254 [run_task] eval solution ...
+366.4s 255 [run_task] solution_1: ok, 64.85 s, peak 4323 MiB
+366.4s 256 [run_task] eval solution ...
+409.2s 257 
+409.2s 258 === result ===
+409.2s 259 solution  time     64.8 s   peak   4323 MiB   eval loss 2.0495
+409.2s 260 written: /kaggle/working/stage3/runs_stage3/startup/result.json
+409.2s 261 STAGE3_RESULT {"name": "startup", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1", "SOUP_X_FPRINT": "1", "SOUP_X_MERGE_VARIANTS": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 64.85, "gpu_peak_mib": 4323, "train_loop_s": 44.16, "eval_loss": 2.0495}
+409.2s 262 STAGE3_START int4 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_FPRINT': '1', 'SOUP_X_MERGE_VARIANTS': '1', 'SOUP_X_ACT_INT4': '1'}
+409.4s 263 
+409.4s 264 === result ===
+409.4s 265 solution  time     64.8 s   peak   4323 MiB   eval loss 2.0495
+409.4s 266 written: /kaggle/working/stage3/runs_stage3/startup/result.json
+409.4s 267 STAGE3_RESULT {"name": "startup", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1", "SOUP_X_FPRINT": "1", "SOUP_X_MERGE_VARIANTS": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 64.85, "gpu_peak_mib": 4323, "train_loop_s": 44.16, "eval_loss": 2.0495}
+409.4s 268 STAGE3_START int4 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_FPRINT': '1', 'SOUP_X_MERGE_VARIANTS': '1', 'SOUP_X_ACT_INT4': '1'}
+425.2s 269 [run_task] warm-up done in 15.05 s
+425.2s 270 [run_task] solution_1: training ...
+425.4s 271 [run_task] warm-up done in 15.05 s
+425.4s 272 [run_task] solution_1: training ...
+493.0s 273 [run_task] solution_1: ok, 67.61 s, peak 3811 MiB
+493.0s 274 [run_task] eval solution ...
+493.2s 275 [run_task] solution_1: ok, 67.61 s, peak 3811 MiB
+493.2s 276 [run_task] eval solution ...
+536.3s 277 
+536.3s 278 === result ===
+536.3s 279 solution  time     67.6 s   peak   3811 MiB   eval loss 2.05089
+536.3s 280 written: /kaggle/working/stage3/runs_stage3/int4/result.json
+536.4s 281 STAGE3_RESULT {"name": "int4", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_FPRINT": "1", "SOUP_X_MERGE_VARIANTS": "1", "SOUP_X_ACT_INT4": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 67.61, "gpu_peak_mib": 3811, "train_loop_s": 46.34, "eval_loss": 2.05089}
+536.4s 282 STAGE3_START control2 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1'}
+536.5s 283 
+536.5s 284 === result ===
+536.5s 285 solution  time     67.6 s   peak   3811 MiB   eval loss 2.05089
+536.5s 286 written: /kaggle/working/stage3/runs_stage3/int4/result.json
+536.5s 287 STAGE3_RESULT {"name": "int4", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_FPRINT": "1", "SOUP_X_MERGE_VARIANTS": "1", "SOUP_X_ACT_INT4": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 67.61, "gpu_peak_mib": 3811, "train_loop_s": 46.34, "eval_loss": 2.05089}
+536.5s 288 STAGE3_START control2 {'SOUP_X_NORM_SAVE16': '1', 'SOUP_X_ACT_INT8': '1'}
+551.4s 289 [run_task] warm-up done in 13.94 s
+551.4s 290 [run_task] solution_1: training ...
+551.6s 291 [run_task] warm-up done in 13.94 s
+551.6s 292 [run_task] solution_1: training ...
+619.1s 293 [run_task] solution_1: ok, 67.55 s, peak 4323 MiB
+619.1s 294 [run_task] eval solution ...
+619.3s 295 [run_task] solution_1: ok, 67.55 s, peak 4323 MiB
+619.3s 296 [run_task] eval solution ...
+661.8s 297 
+661.8s 298 === result ===
+661.8s 299 solution  time     67.5 s   peak   4323 MiB   eval loss 2.04947
+661.8s 300 written: /kaggle/working/stage3/runs_stage3/control2/result.json
+661.8s 301 STAGE3_RESULT {"name": "control2", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 67.55, "gpu_peak_mib": 4323, "train_loop_s": 44.84, "eval_loss": 2.04947}
+662.0s 302 
+662.0s 303 === result ===
+662.0s 304 solution  time     67.5 s   peak   4323 MiB   eval loss 2.04947
+662.0s 305 written: /kaggle/working/stage3/runs_stage3/control2/result.json
+662.0s 306 STAGE3_RESULT {"name": "control2", "flags": {"SOUP_X_NORM_SAVE16": "1", "SOUP_X_ACT_INT8": "1"}, "status": 0, "ok": true, "runs": 1, "wall_s": 67.55, "gpu_peak_mib": 4323, "train_loop_s": 44.84, "eval_loss": 2.04947}
+664.7s 307 STAGE3_COMPLETE
+664.7s 308 STAGE3_COMPLETE
+667.2s 309 /usr/local/lib/python3.13/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+667.2s 310 cells[i][c] = re.sub('\\\\\|', '|', cell)
+667.4s 311 /usr/local/lib/python3.13/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+667.4s 312 text = re.sub(r'_', '\_', text) # Escape underscores in display text
+668.2s 313 [NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+668.3s 314 [NbConvertApp] Writing 13506 bytes to __notebook__.ipynb
+670.8s 315 [NbConvertApp] Converting notebook __notebook__.ipynb to html
+671.3s 316 [NbConvertApp] Writing 285928 bytes to __results__.html

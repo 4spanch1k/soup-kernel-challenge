@@ -1,0 +1,62 @@
+[
+  {
+    "name": "control1",
+    "flags": {
+      "SOUP_X_NORM_SAVE16": "1",
+      "SOUP_X_ACT_INT8": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 75.59,
+    "gpu_peak_mib": 4323,
+    "train_loop_s": 41.36,
+    "eval_loss": 2.04948
+  },
+  {
+    "name": "startup",
+    "flags": {
+      "SOUP_X_NORM_SAVE16": "1",
+      "SOUP_X_ACT_INT8": "1",
+      "SOUP_X_FPRINT": "1",
+      "SOUP_X_MERGE_VARIANTS": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 64.85,
+    "gpu_peak_mib": 4323,
+    "train_loop_s": 44.16,
+    "eval_loss": 2.0495
+  },
+  {
+    "name": "int4",
+    "flags": {
+      "SOUP_X_NORM_SAVE16": "1",
+      "SOUP_X_FPRINT": "1",
+      "SOUP_X_MERGE_VARIANTS": "1",
+      "SOUP_X_ACT_INT4": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 67.61,
+    "gpu_peak_mib": 3811,
+    "train_loop_s": 46.34,
+    "eval_loss": 2.05089
+  },
+  {
+    "name": "control2",
+    "flags": {
+      "SOUP_X_NORM_SAVE16": "1",
+      "SOUP_X_ACT_INT8": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 67.55,
+    "gpu_peak_mib": 4323,
+    "train_loop_s": 44.84,
+    "eval_loss": 2.04947
+  }
+]
