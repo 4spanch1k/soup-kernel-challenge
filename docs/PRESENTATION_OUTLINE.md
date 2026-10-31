@@ -73,7 +73,7 @@ and current-run screenshots in `docs/kaggle/screenshots/`.
 
 **Speaker note:** “Both paired runs passed the harness. Each is a single measurement, not a stable average. Compare each solution only with its same-session base; do not compare raw seconds between Kaggle and Colab.”
 
-**Visual:** Two equal cards for Kaggle and Colab with base/solution time, speedup, memory, eval-loss delta and checks. Put the old saved Kaggle notebook figures in a small, clearly marked historical note.
+**Visual:** Two equal cards for Kaggle and Colab with base/solution time, speedup, memory, eval-loss delta and checks. Add a note that the public saved Kaggle notebook is pre-fix; its historical figures are documented in `README.md`.
 
 ## Slide 7 — Current Kaggle output and harness evidence
 
