@@ -7,8 +7,9 @@ Read `README.md` for the task and results, `AGENTS.md` for the rules. This file 
 Soup Kernel Challenge (Decentrathon 6.0): make the fixed `soup train` run (Qwen2.5-1.5B, 4-bit NF4, LoRA r=16
 on q/v, batch 4, <=512 tokens, 64 steps, fp16) faster and/or lighter on a Tesla T4 with our OWN `@triton.jit`
 kernels, without changing the task. Score = 20 (all 10 checks pass) + 35*ln(speedup)/ln(best) + 30*ln(mem ratio)/ln(best)
-+ 15 README. Deadline: 2026-10-31 23:59 Astana (UTC+5). Only the platform-created team repo is checked:
-copy this repo's final state into it (`git push <platform-repo> main`).
++ 15 README. Deadline: 2026-10-31 23:59 Astana (UTC+5). Only the platform-created team repo is evaluated.
+Project records say the code snapshot was pushed there at `a412248`; the captain still needs to
+confirm jury access and the platform submission status (section 6).
 
 ## 2. State of `main` (code frozen at the measured commit)
 Submission result (Kaggle T4, saved version 1, full harness, 10/10 checks): base 87.77 s / 14,345 MiB
