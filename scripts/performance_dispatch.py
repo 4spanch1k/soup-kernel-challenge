@@ -63,8 +63,39 @@ for name, flags in cases:
     rows.append(row)
     print("DISPATCH_RESULT", json.dumps(row), flush=True)
     Path("/kaggle/working/dispatch-summary.json").write_text(json.dumps(rows, indent=2))
+
+# Keep the already allocated T4 for full qualification after the quick screen.
+# This is notebook tooling, outside every measured training child process.
+qualified = []
+eligible = [row for row in rows if row.get("ok")]
+if status["dispatch"] == 0 and status["codec"] == 0 and eligible:
+    fastest = min(eligible, key=lambda row: row["wall_s"])
+    smallest = min(eligible, key=lambda row: (row["gpu_peak_mib"], row["wall_s"]))
+    shortlist = {row["name"]: row for row in (fastest, smallest)}
+    for name, candidate in shortlist.items():
+        env = clean_env()
+        env.update(candidate["flags"])
+        out = ROOT / "runs_dispatch_qualification" / name
+        print("DISPATCH_QUALIFY_START", name, candidate["flags"], flush=True)
+        code = subprocess.call([sys.executable, "-u", "harness/run_task.py", "--repeats", "2",
+                                "--seed", "2026", "--out", str(out)], env=env)
+        check = subprocess.call([sys.executable, "-u", "harness/check_rules.py", "--result",
+                                 str(out / "result.json")], env=env)
+        row = dict(name=name, flags=candidate["flags"], run_status=code, check_status=check)
+        for filename in ("result.json", "checks.json"):
+            source = out / filename
+            if source.exists():
+                value = json.loads(source.read_text())
+                row["summary" if filename == "result.json" else "checks"] = (
+                    value.get("summary") if filename == "result.json" else value)
+                (Path("/kaggle/working") / (name + "-" + filename)).write_bytes(source.read_bytes())
+        qualified.append(row)
+        print("DISPATCH_QUALIFY_RESULT", json.dumps(row), flush=True)
+        Path("/kaggle/working/dispatch-qualification-summary.json").write_text(
+            json.dumps(qualified, indent=2))
 with zipfile.ZipFile("/kaggle/working/dispatch-evidence.zip", "w", zipfile.ZIP_DEFLATED) as archive:
-    for path in (ROOT / "runs_dispatch").rglob("*"):
-        if path.is_file() and path.suffix in (".json", ".jsonl", ".yaml", ".log"):
-            archive.write(path, str(path.relative_to(ROOT)))
+    for directory in ("runs_dispatch", "runs_dispatch_qualification"):
+        for path in (ROOT / directory).rglob("*"):
+            if path.is_file() and path.suffix in (".json", ".jsonl", ".yaml", ".log"):
+                archive.write(path, str(path.relative_to(ROOT)))
 print("DISPATCH_COMPLETE", flush=True)
