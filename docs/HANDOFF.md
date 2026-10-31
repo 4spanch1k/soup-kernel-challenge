@@ -10,22 +10,24 @@ kernels, without changing the task. Score = 20 (all 10 checks pass) + 35*ln(spee
 + 15 README. Deadline: 2026-10-31 23:59 Astana (UTC+5). Only the platform-created team repo is checked:
 copy this repo's final state into it (`git push <platform-repo> main`).
 
-## 2. State of `main` (code frozen at the T4-measured commit)
-Latest measured (Colab T4, full harness, 10/10 checks): base 76.4 s / 14,345 MiB -> ours 63.5 s / 5,441 MiB
-(x1.20, 2.64x less memory), eval loss -0.006%, our kernels 9.6% of training time. See README "Results".
+## 2. State of `main` (code frozen at the measured commit)
+Submission result (Kaggle T4, saved version 1, full harness, 10/10 checks): base 87.77 s / 14,345 MiB
+-> ours 62.10 s / 5,441 MiB (x1.413, 2.636x less memory), eval loss 2.04964 -> 2.04952,
+our kernels 10.8% of training time. The earlier Colab pair measured 76.4 -> 63.5 s; its separate
+two-run seed repeat measured 80.8 -> 66.2 s. See README and SUBMISSION for the evidence and limits.
 What is in `solution/`: chunked head+cross-entropy (ce_loss.py, head_patch.py), RMSNorm (rmsnorm.py), RoPE (rope.py),
 NF4 dequant for bitsandbytes fwd+bwd (nf4_dequant.py), fused residual-add+RMSNorm (add_rmsnorm.py),
 packed layers = no padding rows + fused layer boundaries (layer_tail.py), tied-embedding fp16 compaction (embed16.py),
 optional MLP recompute (recompute.py, OFF: +16% time for -27% memory, a bad trade), amp.py helper.
 
-## 3. Open experiment branches (each from main; none is merged; each needs a T4 A/B before merging)
-| Branch (worktree) | Idea | Expected | Status when this was written |
-|---|---|---|---|
-| `m2/embed16-safe` (soup-m) | embed16 dtype-safe head outside autocast + PEFT-order lifecycle test | robustness only | pushed, not yet run on T4 |
-| `q/varlen-attn` (soup-q) | Codex: per-sample causal SDPA on packed rows, no scatter/gather | -5..8% time | Codex was implementing |
-| `s/startup` (soup-s) | Codex: ~28 s of the 63 s wall are OUTSIDE the training loop (imports, model load, Triton JIT with empty cache); cut Triton recompiles; adds scripts/startup_breakdown.py | up to several seconds | Codex was implementing |
-| `c2/fused4bit` (soup-f) | Codex bake-off: fused NF4 GEMM in Triton vs our dequant+cuBLAS; default OFF, microbench first (scripts/bench_gemm4bit.py) | long shot (cuBLAS is strong on T4) | Codex was implementing |
-Other ideas not built: fuse the LoRA path (dropout+A+B+add; -5..15 ms, -150..300 MiB), Triton flash-attention for sm75.
+## 3. Experiment branches (all evaluated; none is a pending submission candidate)
+| Branch | Idea | Final result |
+|---|---|---|
+| `m2/embed16-safe` | Safer tied-embedding dtype handling | Four embed16 tests passed on T4; optional robustness change, not needed for the measured submission. |
+| `q/varlen-attn` | Per-sample causal SDPA on packed rows | T4 A/B showed no speed or memory gain; rejected. |
+| `s/startup` | Reduce startup and Triton compile time | No material submission gain; rejected. |
+| `c2/fused4bit` | Fuse NF4 decode into a Triton GEMM | 10–200x slower than dequant plus cuBLAS on tested shapes; rejected. |
+Other tested ideas and evidence are recorded in sections 9–11 and in README. No further GPU experiments are planned for this submission.
 
 ## 4. Decision rule for merging an experiment
 Run `bash scripts/kaggle_3_full.sh` for main and for the branch IN THE SAME Colab SESSION (Colab speed drifts: base
@@ -53,29 +55,27 @@ HackAlem as the captain, confirm jury access to the private platform repository,
 platform submission before the deadline. The current `4spanch1k` GitHub session cannot open that
 private repository. Never download local AI models (user rule).
 
-## 7. Next steps in order of expected value
-1. T4 A/B of `s/startup` (largest untouched slice), then `q/varlen-attn`; merge winners per the rule above.
-2. Seed check of the final code: `python harness/run_task.py --repeats 2 --seed 2026 --out runs_seed2026 && python harness/check_rules.py --result runs_seed2026/result.json`.
-3. Edge batch test with 512-token rows (script in the Codex review notes: Python snippet that writes /tmp/soup_edge512.jsonl, then `--only solution --train-file /tmp/soup_edge512.jsonl`).
-4. Refresh README/SUBMISSION numbers if main changes; keep `solution/` identical to what was measured.
+## 7. Remaining steps
+1. In an anonymous browser session, open the public Kaggle, Pitch, and video links from `SUBMISSION.md`.
+2. The captain signs in to HackAlem, confirms the team submission, and verifies that judges can access the platform repository and recorded snapshot.
+3. Keep `solution/` identical to the measured code; do not resume rejected experiments for this submission.
 
 ## 8. Codex takeover prompt (paste this into Codex if Claude's limit runs out)
 
 ```text
-You are taking over a hackathon project from another AI agent. Repo: https://github.com/4spanch1k/soup-kernel-challenge
-(local clone: /Users/aspanch1k/decentrathon-6.0/soup-kernel-challenge; extra worktrees soup-m/q/s/f/... next to it, see `git worktree list`).
-Read, in this order: AGENTS.md (hard rules, breaking one disqualifies the team), docs/HANDOFF.md on branch origin/x/handoff (state, branches,
-merge decision rule, how to run), README.md (task and results), docs/STARTUP_ANALYSIS.md / docs/FUSED4BIT_NOTES.md if present on the
-experiment branches. The task: make `soup train` (Qwen2.5-1.5B, NF4, LoRA, 64 steps) faster/lighter on a Tesla T4 with our OWN Triton kernels
-without changing the task; main is frozen at the T4-measured code (63.5 s vs 76.4 s base, 5,441 vs 14,345 MiB, 10/10 checks).
-Your job now, in this order:
-1. For each experiment branch in the HANDOFF.md table (m2/embed16-safe, q/varlen-attn, s/startup, c2/fused4bit): read its diff against origin/main,
-   fix bugs by reasoning (nobody can run GPU code on the Mac; the human or the Colab/Kaggle T4 does), keep every change guarded and small.
-   Known fact: q/varlen-attn had a bug (attention.num_heads missing in transformers 5.x) already fixed in commit 401fc2f.
-2. Give the human the exact Colab/Kaggle commands (HANDOFF.md section 5) and apply the merge decision rule (section 4) to the numbers they paste back.
-3. Never merge to main without the human's explicit approval; never download local AI models; never edit harness/, tests/, task/.
-4. Keep README.md/SUBMISSION.md numbers equal to what was actually measured; keep solution/ identical to the measured commit when you finish.
-5. Remaining human-only item: captain access to HackAlem and confirmation of the private platform repository; see section 6 and `docs/CHECKLIST_STATUS.md`.
+You are taking over final delivery for the Soup Kernel Challenge. Repository: https://github.com/4spanch1k/soup-kernel-challenge
+(local clone: /Users/aspanch1k/decentrathon-6.0/soup-kernel-challenge). Read AGENTS.md, README.md,
+SUBMISSION.md, docs/CHECKLIST_STATUS.md, and docs/HANDOFF.md. The measured Kaggle T4 submission is
+87.77 -> 62.10 s, 14,345 -> 5,441 MiB, eval loss 2.04964 -> 2.04952, with all 10 checks passed;
+the separate Colab results are labeled as Colab in the documents.
+
+The code is frozen. Do not edit solution/, harness/, tests/, or task/, and do not run or revive
+rejected GPU experiments. Do not download local AI models. The only outstanding work is external:
+the team captain must authenticate on HackAlem, confirm the submission and judge access to the
+private platform repository, then verify the public links in an anonymous browser session. Do not
+claim platform submission or judge access without seeing confirmation. Never request or handle
+another person's password or verification code.
+
 Deadline: 2026-10-31 23:59 Astana time.
 ```
 
