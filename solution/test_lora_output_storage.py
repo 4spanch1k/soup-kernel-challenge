@@ -56,6 +56,7 @@ def test_real_matmul_owning_output_and_inplace_backward(monkeypatch, shape, with
 @pytest.mark.parametrize("with_bias", [False, True])
 def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, with_bias):
     import bitsandbytes as bnb
+    from peft import LoraConfig
     from peft.tuners.lora.bnb import Linear4bit
 
     from solution.lora_path import patch_lora_linear4bit
@@ -69,8 +70,9 @@ def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, wit
     base = bnb.nn.Linear4bit(128, 96, bias=with_bias, compute_dtype=torch.float16,
                             compress_statistics=True, quant_type="nf4").half().cuda()
     base.requires_grad_(False)
-    layer = Linear4bit(base, "default", r=16, lora_alpha=8, lora_dropout=0.05,
-                       init_lora_weights=True, use_dora=False).cuda().train()
+    config = LoraConfig(r=16, lora_alpha=8, lora_dropout=0.05,
+                        init_lora_weights=True, use_dora=False, bias="none")
+    layer = Linear4bit(base, "default", config=config).cuda().train()
     # PEFT initializes B to zero; nonzero weights exercise both adapter gradients.
     with torch.no_grad():
         layer.lora_A["default"].weight.normal_(std=0.02)
@@ -147,3 +149,39 @@ def test_real_matmul_unsupported_input_keeps_fallback(monkeypatch, unsupported):
     actual, dx = run(True)
     torch.testing.assert_close(actual, expected, rtol=2e-3, atol=2e-3)
     torch.testing.assert_close(dx, dx_expected, rtol=5e-3, atol=5e-3)
+
+
+@pytest.mark.parametrize("mode", ["int8", "int4"])
+@pytest.mark.parametrize("unsupported", ["empty", "float64"])
+def test_saved_activation_codec_empty_and_dtype_guard(monkeypatch, mode, unsupported):
+    from transformers import Qwen2Config
+    from transformers.models.qwen2.modeling_qwen2 import Qwen2MLP
+    from solution import activation_codec
+
+    calls = []
+
+    def plain_forward(self, x):
+        calls.append(True)
+        return self.down_proj(torch.nn.functional.silu(self.gate_proj(x)) * self.up_proj(x))
+
+    monkeypatch.setattr(Qwen2MLP, "forward", plain_forward)
+    monkeypatch.setenv("SOUP_X_ACT_INT8", "1" if mode == "int8" else "0")
+    monkeypatch.setenv("SOUP_X_ACT_INT4", "1" if mode == "int4" else "0")
+    activation_codec.patch_saved_activation_int8()
+    dtype = torch.float64 if unsupported == "float64" else torch.float16
+    layer = Qwen2MLP(Qwen2Config(hidden_size=32, intermediate_size=64)).cuda().to(dtype)
+    layer.train().requires_grad_(False)
+    shape = (0, 32) if unsupported == "empty" else (3, 32)
+    x = torch.randn(*shape, device="cuda", dtype=dtype, requires_grad=True)
+
+    def forbidden(*_args):
+        pytest.fail("unsupported activation entered the compression kernel")
+
+    monkeypatch.setattr(activation_codec.SavedActivationInt8, "apply", forbidden)
+    monkeypatch.setattr(activation_codec.SavedActivationInt4, "apply", forbidden)
+    actual = layer(x)
+    expected = plain_forward(layer, x)
+    assert len(calls) == 2
+    torch.testing.assert_close(actual, expected)
+    actual.sum().backward()
+    assert x.grad is not None and torch.isfinite(x.grad).all()

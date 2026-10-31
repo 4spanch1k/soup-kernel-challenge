@@ -34,11 +34,44 @@ def patch_qwen2_layer_tail():
     def forward(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
                 inputs_embeds=None, use_cache=None, **kwargs):
         supplied_inputs_embeds = inputs_embeds
+        supplied_kwargs = kwargs.copy()
 
-        def fallback():
+        # PEFT 0.20 forwards these three keywords even when they are None. They
+        # request the same default outputs that this path already returns. Keep
+        # every non-default request and unknown keyword on the original path.
+        for key in ("output_hidden_states", "output_attentions"):
+            if key in kwargs and (kwargs[key] is None or kwargs[key] is False):
+                kwargs.pop(key)
+        if ("return_dict" in kwargs and (kwargs["return_dict"] is None or kwargs["return_dict"] is True)
+                and getattr(self.config, "return_dict", True)):
+            kwargs.pop("return_dict")
+
+        def fallback(reason, layer_index=None):
+            if (os.environ.get("SOUP_X_TRACE_DISPATCH") == "1"
+                    and not getattr(self, "_soup_layer_tail_fallback_traced", False)):
+                import json
+
+                self._soup_layer_tail_fallback_traced = True
+                simple = (type(None), bool, int, float, str)
+                flags = {key: value if isinstance(value, simple) else type(value).__name__
+                         for key, value in supplied_kwargs.items()}
+                config = getattr(self, "config", None)
+                details = {
+                    "reason": reason, "layer_index": layer_index,
+                    "model_type": type(self).__name__, "training": self.training,
+                    "grad_enabled": torch.is_grad_enabled(),
+                    "gradient_checkpointing": getattr(self, "gradient_checkpointing", None),
+                    "use_cache": use_cache, "config_use_cache": getattr(config, "use_cache", None),
+                    "output_hidden_states": getattr(config, "output_hidden_states", None),
+                    "output_attentions": getattr(config, "output_attentions", None),
+                    "return_dict": getattr(config, "return_dict", None),
+                    "past_key_values_type": type(past_key_values).__name__,
+                    "kwargs": flags, "remaining_kwargs": sorted(kwargs),
+                }
+                print("SOUP_LAYER_TAIL_FALLBACK " + json.dumps(details, sort_keys=True), flush=True)
             return original(self, input_ids=input_ids, attention_mask=attention_mask,
                             position_ids=position_ids, past_key_values=past_key_values,
-                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache, **kwargs)
+                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache, **supplied_kwargs)
 
         if ((input_ids is None) == (inputs_embeds is None)
                 or type(self) is not modeling_qwen2.Qwen2Model
@@ -46,6 +79,7 @@ def patch_qwen2_layer_tail():
                 or self.gradient_checkpointing or past_key_values is not None or kwargs
                 or getattr(self.config, "output_hidden_states", False)
                 or getattr(self.config, "output_attentions", False)
+                or not getattr(self.config, "return_dict", True)
                 or (self.config.use_cache if use_cache is None else use_cache)
                 or not isinstance(attention_mask, (torch.Tensor, dict, type(None)))
                 or not isinstance(position_ids, (torch.Tensor, type(None)))
@@ -53,9 +87,9 @@ def patch_qwen2_layer_tail():
                 or len(self.config.layer_types) != self.config.num_hidden_layers
                 or self.config.hidden_size > MAX_WIDTH
                 or type(self.norm) is not modeling_qwen2.Qwen2RMSNorm):
-            return fallback()
+            return fallback("model_guard")
 
-        for layer in self.layers:
+        for layer_index, layer in enumerate(self.layers):
             if (type(layer) is not modeling_qwen2.Qwen2DecoderLayer
                     or type(layer.self_attn) is not modeling_qwen2.Qwen2Attention
                     or type(layer.mlp) is not modeling_qwen2.Qwen2MLP
@@ -64,19 +98,19 @@ def patch_qwen2_layer_tail():
                     or type(layer.post_attention_layernorm) is not modeling_qwen2.Qwen2RMSNorm
                     or not layer.input_layernorm.weight.is_cuda
                     or not layer.post_attention_layernorm.weight.is_cuda):
-                return fallback()
+                return fallback("layer_guard", layer_index)
 
         if not self.norm.weight.is_cuda or not self.embed_tokens.weight.is_cuda:
-            return fallback()
+            return fallback("model_device_guard")
 
         if inputs_embeds is None:
             if not torch.is_tensor(input_ids) or not input_ids.is_cuda:
-                return fallback()
+                return fallback("input_ids_guard")
             inputs_embeds = self.embed_tokens(input_ids)
         if (not torch.is_tensor(inputs_embeds) or inputs_embeds.dim() != 3
                 or not inputs_embeds.is_cuda or inputs_embeds.shape[-1] > MAX_WIDTH
                 or inputs_embeds.dtype not in (torch.float16, torch.float32)):
-            return fallback()
+            return fallback("inputs_embeds_guard")
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)

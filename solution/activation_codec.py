@@ -190,7 +190,8 @@ def patch_saved_activation_int8():
     codec = SavedActivationInt4 if int4 else SavedActivationInt8
 
     def forward(self, x):
-        if (not self.training or not torch.is_grad_enabled() or not x.is_cuda
+        if (not torch.is_tensor(x) or not self.training or not torch.is_grad_enabled() or not x.is_cuda
+                or x.dtype not in (torch.float16, torch.float32) or x.numel() == 0
                 or not x.requires_grad
                 or getattr(getattr(self, 'config', None), 'hidden_act', 'silu') != 'silu'):
             return original(self, x)
