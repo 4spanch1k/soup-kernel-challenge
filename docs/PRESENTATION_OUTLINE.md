@@ -99,16 +99,16 @@ below is taken from `README.md` or `docs/kaggle/checks.json`.
 
 **Visual:** A status card with “Measured: Kaggle T4, one pair”, “Earlier: Colab T4 and seed repeat”, and “Recomputation off”, next to a small table of rejected ideas.
 
-## Slide 9 — Next steps
+## Slide 9 — Final submission checks
 
-- Link the public demo video and this presentation in `SUBMISSION.md`.
-- Check the public Kaggle link in an incognito window and confirm the final commit and links before the deadline.
-- If the jury's environment differs, recheck the check 4 margin and repeat the measurement.
-- Keep MLP recomputation as an optional experiment until it is a better trade.
+- The demo video and presentation links are recorded in `SUBMISSION.md`.
+- Verify the Kaggle, Pitch, and video links in an anonymous browser session.
+- Confirm the judging team's access to the private platform repository before the deadline.
+- Keep MLP recomputation disabled: it costs 16% more time for 27% less memory.
 
-**Speaker note:** “The code is frozen at the measured commit; only the documents and the video and presentation links remain.”
+**Speaker note:** “The measured code is frozen. The final operational check is that the judges can open the links and the platform repository.”
 
-**Visual:** A short sequence: links filled in → incognito check → final submission.
+**Visual:** Show the three public links and the platform access check.
 
 ## Q&A preparation
 

@@ -45,12 +45,13 @@ A speed gain under 5% counts as a tie in the score, so tiny gains are worth litt
 * Codex CLI (not on PATH): `~/.vscode/extensions/openai.chatgpt-*/bin/macos-aarch64/codex exec -s workspace-write -C <worktree> --skip-git-repo-check -o out.md - < prompt.md`
   run in the background; its sandbox cannot write the shared git index (commit for it) and cannot reach the network.
 
-## 6. Things only the human can do
-1. Merge approvals (an automated check blocks merging without the user's explicit chat approval).
-2. Verify the phone in Kaggle (kaggle.com/settings) and run `docs/RUN_ON_KAGGLE.md` there (`COMMIT` = final sha).
-3. Record the <=3 min video (`docs/DEMO_VIDEO_SCRIPT.md`), finish the presentation (draft deck artifact, outline in `docs/PRESENTATION_OUTLINE.md`).
-4. Fill team name/members/links/final sha in `SUBMISSION.md`; copy the final code into the platform repository.
-Never download local AI models (user rule).
+## 6. Remaining work (updated 2026-10-31)
+
+The Kaggle run, team details, code snapshot, Pitch deck, and 2:56 demo video are recorded in
+`docs/CHECKLIST_STATUS.md` and `SUBMISSION.md`. The only unresolved handoff is to authenticate on
+HackAlem as the captain, confirm jury access to the private platform repository, and finish the
+platform submission before the deadline. The current `4spanch1k` GitHub session cannot open that
+private repository. Never download local AI models (user rule).
 
 ## 7. Next steps in order of expected value
 1. T4 A/B of `s/startup` (largest untouched slice), then `q/varlen-attn`; merge winners per the rule above.
@@ -74,7 +75,7 @@ Your job now, in this order:
 2. Give the human the exact Colab/Kaggle commands (HANDOFF.md section 5) and apply the merge decision rule (section 4) to the numbers they paste back.
 3. Never merge to main without the human's explicit approval; never download local AI models; never edit harness/, tests/, task/.
 4. Keep README.md/SUBMISSION.md numbers equal to what was actually measured; keep solution/ identical to the measured commit when you finish.
-5. Remaining human-only items: Kaggle phone verification and run, video, presentation, team data, copying the final code to the platform repository.
+5. Remaining human-only item: captain access to HackAlem and confirmation of the private platform repository; see section 6 and `docs/CHECKLIST_STATUS.md`.
 Deadline: 2026-10-31 23:59 Astana time.
 ```
 
@@ -103,4 +104,4 @@ bitsandbytes 4-bit layers PEFT uses `peft.tuners.lora.bnb.Linear4bit` (its own f
 Result with the (inactive) patch: 63.2 s / 5,441 MiB = identical to main. Microbenchmark of the fused call alone (scripts/bench_lora_fuse.py):
 slower at N=826 (1.26 vs 0.94 ms per q call, ~+17 ms/step over 56 calls) and only ~-12 MiB retained per layer at N=2048 (~-330 MiB at the peak batch),
 so even if re-targeted the net score effect is about zero or negative. Do not pursue unless a clearly cheaper design appears.
-Conclusion: main (29184d9) is the best measured code; all experiment branches are rejected. Everything left is human-only (see section 6).
+Conclusion: the measured code is frozen and all experiment branches are rejected. The only remaining handoff is platform access and submission (see section 6).

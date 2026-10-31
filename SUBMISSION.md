@@ -6,7 +6,7 @@
 - Submission code commit: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2. The following documentation commit only records this link and checklist status.
 - Kaggle-measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
 - Public Kaggle notebook: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146 (saved version 1, all checks passed).
-- Demo video (up to 3 minutes): TODO — add the public video link.
+- Demo video (2:56): [mononyx demo MP4](https://github.com/4spanch1k/soup-kernel-challenge/releases/download/mononyx-demo-2026-10-31/mononyx-demo.mp4) ([release page](https://github.com/4spanch1k/soup-kernel-challenge/releases/tag/mononyx-demo-2026-10-31)). Russian narration uses the macOS Milena system voice; no participant voice was cloned.
 - Presentation: [Soup Kernel Challenge — mononyx](https://pitch.com/v/soup-kernel-challenge-mononyx-wbjvqz).
 
 ## Team
@@ -86,8 +86,8 @@ Colab repeat check, another seed (2026) and two runs per side (jury-like): all 1
 
 Describe the optimized operations and kernel ideas, base-versus-solution time and memory, eval
 loss, the limits of one Kaggle pair on public data, rejected experiments, and next steps. The
-video draft is `docs/DEMO_VIDEO_SCRIPT.md`; record it and add its public link above before final
-submission. The presentation is linked above.
+published video is linked above with its script at `docs/DEMO_VIDEO_SCRIPT.md`. The presentation
+is linked above as well.
 
 ## Limitations
 
