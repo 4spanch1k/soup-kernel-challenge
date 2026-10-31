@@ -9,11 +9,12 @@ import torch
 pytestmark = pytest.mark.skipif(not torch.cuda.is_available(), reason="needs a CUDA GPU")
 
 
-def test_ce_merge_variants_matches_default(monkeypatch):
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_ce_merge_variants_matches_default(monkeypatch, dtype):
     from solution.ce_loss import chunked_head_loss
 
     torch.manual_seed(23)
-    hidden = torch.randn(2, 7, 17, device="cuda", dtype=torch.float16)
+    hidden = torch.randn(2, 7, 17, device="cuda", dtype=dtype)
     weight = torch.randn(101, 17, device="cuda", dtype=torch.float16)
     labels = torch.randint(0, 101, (2, 7), device="cuda")
     labels[:, 0] = -100
@@ -71,12 +72,13 @@ def test_residual_merge_variants_matches_default(monkeypatch):
     importlib.reload(add_module)
 
 
-def test_rope_merge_variants_matches_default(monkeypatch):
+@pytest.mark.parametrize("dtype", [torch.float16, torch.float32])
+def test_rope_merge_variants_matches_default(monkeypatch, dtype):
     import solution.rope as rope_module
     original_mode = os.environ.get("SOUP_X_MERGE_VARIANTS")
 
     torch.manual_seed(37)
-    source = torch.randn(2, 3, 7, 16, device="cuda", dtype=torch.float16)
+    source = torch.randn(2, 3, 7, 16, device="cuda", dtype=dtype)
     cosine = torch.randn(1, 7, 16, device="cuda")
     sine = torch.randn(1, 7, 16, device="cuda")
     grad = torch.randn_like(source)
@@ -88,7 +90,7 @@ def test_rope_merge_variants_matches_default(monkeypatch):
             monkeypatch.delenv("SOUP_X_MERGE_VARIANTS", raising=False)
         importlib.reload(rope_module)
         x = source.detach().clone().requires_grad_(True)
-        output = rope_module.RotaryFunction.apply(x, cosine, sine, torch.float16)
+        output = rope_module.RotaryFunction.apply(x, cosine, sine, dtype)
         (output * grad).sum().backward()
         return output.detach(), x.grad
 

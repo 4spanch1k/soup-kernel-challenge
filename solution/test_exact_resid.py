@@ -30,3 +30,16 @@ def test_exact_residual_matches_saved_sum(residual_dtype, y_dtype):
     exact = run(True)
     for normal_value, exact_value in zip(normal, exact):
         assert torch.equal(exact_value, normal_value)
+
+    ref_residual = residual.detach().clone().requires_grad_(True)
+    ref_delta = delta.detach().clone().requires_grad_(True)
+    ref_total = ref_residual + ref_delta
+    ref_x = ref_total.float()
+    ref_x = ref_x * torch.rsqrt(ref_x.square().mean(-1, keepdim=True) + 1e-6)
+    ref_y = (weight * ref_x.to(ref_total.dtype)).to(y_dtype)
+    torch.autograd.backward((ref_y, ref_total), (dy, dsum))
+    tolerance = 2e-3 if y_dtype == torch.float16 else 1e-5
+    torch.testing.assert_close(normal[0], ref_y, rtol=tolerance, atol=tolerance)
+    torch.testing.assert_close(normal[1], ref_total, rtol=0, atol=0)
+    torch.testing.assert_close(normal[2], ref_residual.grad, rtol=5e-3, atol=5e-3)
+    torch.testing.assert_close(normal[3], ref_delta.grad, rtol=5e-3, atol=5e-3)

@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Run after scripts/kaggle_1_tests.sh on a T4. All generated files stay in runs_exp/.
+# Run after scripts/kaggle_1_tests.sh on a T4. Repository outputs go under runs_exp/.
 set -euo pipefail
 repo_root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_root"
 export PYTHONDONTWRITEBYTECODE=1
 
 mkdir -p runs_exp
+public_file="$repo_root/data/train.jsonl"
+if [[ ! -f "$public_file" ]]; then
+  printf 'missing public data: %s (run scripts/kaggle_1_tests.sh first)\n' "$public_file" >&2
+  exit 1
+fi
+
 printf '%s\n' '=== solution CUDA tests (all experiment switches off) ==='
 env -u SOUP_X_ATTN_CKPT -u SOUP_X_EXACT_RESID -u SOUP_X_MERGE_VARIANTS \
   python -B -u -m pytest solution -q -p no:cacheprovider
@@ -56,23 +62,19 @@ print(f"[result] {sys.argv[2]} wall_s={summary['wall_s']} "
 PY
 }
 
-printf '%s\n' '=== T4 diagnostics (first) ==='
-REPO="$repo_root" bash scripts/t4_diag.sh || true
-
-public_file="$repo_root/data/train.jsonl"
-if [[ ! -f "$public_file" ]]; then
-  printf 'missing public data: %s (run scripts/kaggle_1_tests.sh first)\n' "$public_file" >&2
-  exit 1
-fi
-
-for variant in all attn1 resid variants attn2; do
-  run_case public "$variant" A 1 "$public_file"
-  run_case public "$variant" B 1 "$public_file"
-  run_case public "$variant" A 2 "$public_file"
-  run_case public "$variant" B 2 "$public_file"
+for dataset in public edge512; do
+  if [[ "$dataset" == "public" ]]; then
+    train_file="$public_file"
+  else
+    train_file="$edge_file"
+  fi
+  for variant in attn1 attn2 resid variants all; do
+    run_case "$dataset" "$variant" A 1 "$train_file"
+    run_case "$dataset" "$variant" B 1 "$train_file"
+    run_case "$dataset" "$variant" A 2 "$train_file"
+    run_case "$dataset" "$variant" B 2 "$train_file"
+  done
 done
-# dense batches: one A-B pair of the full package
-run_case edge512 all A 1 "$edge_file"
-run_case edge512 all B 1 "$edge_file"
 
-printf '%s\n' '=== done ==='
+printf '%s\n' '=== T4 diagnostics ==='
+REPO="$repo_root" bash scripts/t4_diag.sh
