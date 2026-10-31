@@ -5,16 +5,15 @@ We optimized the fixed `soup train` run with our own Triton kernels. The run rem
 Tesla T4. The fixed task uses batch 4, up to 512 tokens and 64 steps. We did not change the model,
 data, batches, training steps, optimizer, schedule, LoRA settings, or Soup switches.
 
-**Result in one line (Kaggle T4, saved version 1):** 87.77 s → 62.10 s (1.413x faster), 14,345 → 5,441 MiB
-(2.636x less memory), eval loss 2.04964 → 2.04952 (-0.006%), all 10 harness checks passed, own kernels
-10.8% of training time.
+**Result in one line (Colab Tesla T4, base and solution in the same session, final code `d881159`):** 77.3 s → 54.1 s (1.428x faster), 14,345 → 4,591 MiB (3.125x less memory), eval loss 2.04966 → 2.04987 (+0.010%), all 10 harness checks passed, own kernels 13.1% of training time.
+The earlier saved Kaggle run (87.77 s → 62.10 s, 14,345 → 5,441 MiB, 10/10 checks) measured the code before the final fix described below.
 
 **Team repository:** [BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
 
 **Submission code snapshot:** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
 
 **Public Kaggle notebook:** [saved version 1, with results](https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146).
-The notebook pins [b587c5c](https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16), as specified in `docs/FINISH_CHECKLIST.md`.
+The notebook shows the earlier code, before the final fix, and pins [b587c5c](https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16), as specified in `docs/FINISH_CHECKLIST.md`.
 
 ## What we changed
 
@@ -59,7 +58,28 @@ included in our kernel share.
 
 ## Results
 
-### Kaggle Tesla T4, 30 October 2026
+### Final update: packed-row path fix (Colab Tesla T4, 31 October 2026)
+
+After the Kaggle run we found that the patched `Qwen2Model.forward` always took its original
+fallback: PEFT passes `output_attentions=None`, `output_hidden_states=None` and `return_dict=None`
+down to the base model, and the wrapper treated those default-valued kwargs as unsupported. The
+fix is limited to `solution/layer_tail.py`: it drops only those default-valued flags before the
+check for unsupported kwargs, so the packed-row path (padding rows skipped through the decoder
+layers, padded layout kept only for attention) now runs. Final source commit: `d881159dadf73b09fb847420a70ac0644cedc429`; `solution/`
+differs from the earlier measured code in that file only.
+
+One base and one solution run in the same session with the unchanged harness:
+
+| Metric | Base Soup | Ours | Result |
+|---|---:|---:|---:|
+| Whole `soup train`, seconds | 77.3 | 54.1 | 1.428x speedup |
+| Peak GPU memory, MiB | 14,345 | 4,591 | 3.125x lower |
+| Eval loss | 2.04966 | 2.04987 | +0.010% vs base |
+
+All 10 harness checks passed; own kernels accounted for 13.1% of training time. This is a single
+paired run on Colab, not repeated; the saved Kaggle notebook was not re-run on this commit.
+
+### Kaggle Tesla T4, 30 October 2026 (code before the final fix)
 
 Saved version 1 ran the imported notebook with **Save & Run All**, Internet enabled and the
 GPU T4 x2 accelerator selected. The unchanged harness restricts each measured process to one
