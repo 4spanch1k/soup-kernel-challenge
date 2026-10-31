@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
-# Redirect: run the c17 memory-peak diagnostic (public data) from this notebook.
+# Redirect: full measurement and the ten checks for the final candidate branch.
 set -u
 cd "$(dirname "$0")/.."
-git fetch -q origin c17/mempeak
+git fetch -q origin final/packed-fix
 git checkout -q -f FETCH_HEAD
-bash scripts/t4_mem2.sh public 2>&1 | grep -a "^\[mem\]" | cut -c1-170 | head -110
+git log -1 --oneline
+bash scripts/kaggle_3_full.sh 2>&1 | tail -60
 echo "=== done ==="
