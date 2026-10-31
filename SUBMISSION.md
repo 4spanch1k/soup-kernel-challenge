@@ -3,8 +3,9 @@
 ## Links
 
 - Repository: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx
-- Submission code commit: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2. The following documentation commit only records this link and checklist status.
-- Kaggle-measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
+- Submission code commit (snapshot taken before the final fix; the captain syncs the final code): https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2. The following documentation commit only records this link and checklist status.
+- Final measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/d881159dadf73b09fb847420a70ac0644cedc429 (Colab T4, 10/10 checks; differs from the Kaggle-measured commit only in `solution/layer_tail.py`).
+- Kaggle-measured source commit (earlier code, before the final fix): https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
 - Public Kaggle notebook: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146 (saved version 1, all checks passed).
 - Demo video (2:56): [mononyx demo MP4](https://github.com/4spanch1k/soup-kernel-challenge/releases/download/mononyx-demo-2026-10-31/mononyx-demo.mp4) ([release page](https://github.com/4spanch1k/soup-kernel-challenge/releases/tag/mononyx-demo-2026-10-31)). Russian narration uses the macOS Milena system voice; no participant voice was cloned.
 - Presentation: [Soup Kernel Challenge — mononyx](https://pitch.com/v/soup-kernel-challenge-mononyx-wbjvqz).
@@ -41,7 +42,22 @@ is not enabled; only its `STEP_ATTR` hand-off name is reused for the rewind reco
 
 ## Results
 
-### Kaggle T4, saved version 1
+### Colab T4, final source `d881159`
+
+One base and one solution run in the same session with the unchanged harness (31 October 2026).
+
+| Metric | Base Soup | Ours | Ratio / change |
+|---|---:|---:|---:|
+| Whole `soup train`, seconds | 77.3 | 54.1 | 1.428x speedup |
+| Peak GPU memory, MiB | 14,345 | 4,591 | 3.125x lower |
+| Eval loss | 2.04966 | 2.04987 | +0.010% vs base |
+
+- [x] All 10 harness checks passed. Own-kernel share 13.1%.
+- The fix: the patched `Qwen2Model.forward` always fell back to the original path because PEFT passes
+  default-valued `output_attentions`, `output_hidden_states` and `return_dict`; only `solution/layer_tail.py`
+  changed, so the packed-row path now runs. Single paired run, not repeated; the saved Kaggle notebook below shows the earlier code.
+
+### Kaggle T4, saved version 1 (earlier code, before the final fix)
 
 One base and one solution run on 30 October 2026, commit `b587c5c`, using the unchanged harness.
 
