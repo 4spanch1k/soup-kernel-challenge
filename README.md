@@ -10,7 +10,7 @@ The earlier saved Kaggle run (87.77 s → 62.10 s, 14,345 → 5,441 MiB, 10/10 c
 
 **Team repository:** [BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
 
-**Submission code snapshot:** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
+**Submission code snapshot (taken before the final fix; the final code is `d881159`, see below):** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
 
 **Public Kaggle notebook:** [saved version 1, with results](https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146).
 The notebook shows the earlier code, before the final fix, and pins [b587c5c](https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16), as specified in `docs/FINISH_CHECKLIST.md`.
@@ -105,7 +105,7 @@ The downloaded result matches the SHA-256 recorded in `checks.json`; the local `
 also matches its recorded solution SHA-256.
 These are a single measured pair, not the jury's hidden-data result.
 
-### Earlier Colab Tesla T4 measurements
+### Earlier Colab Tesla T4 measurements (pre-fix code, historical)
 
 These are one base run and one solution run from `harness/run_task.py`, followed by
 `harness/check_rules.py`, on a Google Colab Tesla T4; a two-run repeat with another seed is
@@ -135,15 +135,16 @@ packed-layers row):
 | + own NF4 dequantization in backward | 75.7 (80.7) | 8,427 | 4.97% (fail) |
 | + RMSNorm writes fp16, fused add + post-attention norm | 65.8 (77.5) | 6,321 | 6.4% |
 | + fused layer boundaries, own NF4 dequantization in the matmul forward | 68.2 (80.9) | 6,321 | 8.8% |
-| + packed layers: padding rows skipped (43% of rows are padding) | 61.1 (75.9) | 6,321 | 10.4% |
+| + packed-layer path (pre-fix: PEFT's default-valued flags sent the call to the original path, so padding rows were not actually skipped) | 61.1 (75.9) | 6,321 | 10.4% |
 | + tied embedding and head compacted into one exact fp16 table (final) | 63.5 (76.4) | 5,441 | 9.6% |
 
 Two patches that are not kernels: `solution/layer_tail.py` runs the decoder stack on the valid
 tokens only and keeps the padded layout just for attention (the rules allow removing padding inside
 a batch), and `solution/embed16.py` replaces the tied fp32 embedding/head (exactly fp16-representable
 because the model is loaded in fp16) by one shared fp16 parameter; the embedding output stays fp32.
-The memory peak is set by the densest batch, which has almost no padding, so packing helps time but
-not peak memory.
+In these pre-fix runs the peak stayed at 5,441 MiB while `layer_tail.py` fell back to the original path. After the
+fix in `d881159` activated packed-row execution, the measured peak was 4,591 MiB in both reported final pairs
+(each a single paired run).
 
 MLP recomputation (`solution/recompute.py`, our own `torch.utils.checkpoint`, not Soup's switch) was
 measured on the T4 in one session, solution only: off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB. It
