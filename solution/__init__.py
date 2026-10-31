@@ -21,9 +21,11 @@ from .recompute import patch_qwen2_mlp_recompute
 from .rmsnorm import patch_qwen2_rmsnorm
 from .rope import patch_qwen2_rope
 from .swiglu import patch_qwen2_mlp
+from .warm import start_warm_thread
 
 
 def apply():
+    start_warm_thread()  # compile our kernels in a thread while Soup loads the model (warm.py)
     patch_qwen2_mlp()  # the example: works out of the box, does not count as your own kernel
     patch_qwen2_mlp_recompute()  # C: MLP recomputation, off unless enabled (recompute.py)
     patch_qwen2_rmsnorm()  # B: fused RMSNorm (rmsnorm.py)
