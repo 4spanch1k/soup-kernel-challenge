@@ -55,7 +55,7 @@ One base and one solution run in the same session with the unchanged harness (31
 - [x] All 10 harness checks passed. Own-kernel share 13.1%.
 - The fix: the patched `Qwen2Model.forward` always fell back to the original path because PEFT passes
   default-valued `output_attentions`, `output_hidden_states` and `return_dict`; only `solution/layer_tail.py`
-  changed, so the packed-row path now runs. Single paired run, not repeated; the saved Kaggle notebook below shows the earlier code.
+  changed, so the packed-row path now runs. Second independent run of the same commit on a Kaggle T4 (interactive session, not saved): 98.1 s -> 58.5 s (1.677x), 14,345 -> 4,591 MiB (3.125x), eval loss +0.009%, 10/10 checks. Each is a single pair; the saved Kaggle notebook below shows the earlier code.
 
 ### Kaggle T4, saved version 1 (earlier code, before the final fix)
 
