@@ -3,7 +3,7 @@ import json, os, subprocess, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
-FLAGS=['SOUP_X_PARALLEL_CE','SOUP_X_ACT_INT8','SOUP_X_HEAD_CHUNK','SOUP_X_ATTN_CKPT',
+FLAGS=['SOUP_X_VARLEN','SOUP_X_PARALLEL_CE','SOUP_X_ACT_INT8','SOUP_X_HEAD_CHUNK','SOUP_X_ATTN_CKPT',
        'SOUP_X_DENSE_CKPT','SOUP_X_EXACT_RESID','SOUP_X_MERGE_VARIANTS','SOUP_X_LORA',
        'SOUP_X_FPRINT','SOUP_RECOMPUTE_MLP']
 FAST=dict(SOUP_X_MERGE_VARIANTS='1',SOUP_X_LORA='1',SOUP_X_FPRINT='1')
@@ -12,6 +12,7 @@ CASES=[('control1',{}),('parallel',dict(FAST,SOUP_X_PARALLEL_CE='1')),
        ('int8',dict(FAST,SOUP_X_PARALLEL_CE='1',SOUP_X_ACT_INT8='1')),
        ('int8_attention',dict(FAST,SOUP_X_PARALLEL_CE='1',SOUP_X_ACT_INT8='1',
                               SOUP_X_ATTN_CKPT='1',SOUP_X_DENSE_CKPT='1',SOUP_X_EXACT_RESID='1')),
+       ('varlen_int8',dict(FAST,SOUP_X_PARALLEL_CE='1',SOUP_X_ACT_INT8='1',SOUP_X_VARLEN='1')),
        ('control2',{})]
 rows=[]
 for name,flags in CASES:

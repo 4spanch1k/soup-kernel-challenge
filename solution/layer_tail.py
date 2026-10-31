@@ -116,6 +116,10 @@ def patch_qwen2_layer_tail():
             residual = rows
             layer_input = self.layers[0].input_layernorm(residual)
             cos, sin = position_embeddings
+            varlen_plan = None
+            if os.environ.get("SOUP_X_VARLEN") == "1":
+                from .varlen_bridge import prepare_plan
+                varlen_plan = prepare_plan(attention_mask, cos, sin)
             attention_checkpoint = os.environ.get("SOUP_X_ATTN_CKPT", "0")
             exact_residual = os.environ.get("SOUP_X_EXACT_RESID") == "1"
 
@@ -126,10 +130,15 @@ def patch_qwen2_layer_tail():
 
                 def attention_output(hidden, cos, sin, mask, checkpoint_sdpa,
                                      attention=attention, attention_interface=attention_interface,
-                                     packed_idx=packed_idx, batch=batch, seq=seq):
+                                     packed_idx=packed_idx, batch=batch, seq=seq, varlen_plan=varlen_plan):
                     q = attention.q_proj(hidden)
                     k = attention.k_proj(hidden)
                     v = attention.v_proj(hidden)
+                    if varlen_plan is not None:
+                        from .varlen_bridge import packed_attention
+                        compact = packed_attention(q, k, v, attention, varlen_plan)
+                        if compact is not None:
+                            return attention.o_proj(compact)
                     q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
                     k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
                     v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
