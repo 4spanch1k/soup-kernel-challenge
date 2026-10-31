@@ -23,7 +23,7 @@ run_case() {
 
     echo "=== $tag ($variant) ==="
     SOUP_X_WARM="$warm" \
-    SOUP_X_WARM_LOG=0 \
+    SOUP_X_WARM_LOG="$warm" \
     SOUP_X_FPRINT="$fprint" \
     SOUP_X_MERGE_VARIANTS="$merge_variants" \
     SOUP_X_VARLEN="$varlen" \
@@ -32,6 +32,7 @@ run_case() {
     SOUP_RECOMPUTE_MLP=0 \
         python -u harness/run_task.py --only solution --out "$out" || status=$?
 
+    grep -rh "^\[warm\]\|^\[varlen\]" "$out" 2>/dev/null | sort -u | head -60
     if [[ -f "$out/result.json" ]]; then
         python -u - "$out/result.json" "$tag" <<'PY'
 import json
