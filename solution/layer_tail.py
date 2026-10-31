@@ -8,6 +8,12 @@ from .add_rmsnorm import MAX_WIDTH, add_rmsnorm
 from .amp import autocast_dtype
 
 
+def _varlen_why(detail):
+    """SOUP_X_WARM_LOG=1: say why the single-call attention path is not used."""
+    if os.environ.get("SOUP_X_WARM_LOG"):
+        print(f"[varlen] off: {detail}"[:400], flush=True)
+
+
 def _fuse_add_norm(residual, delta, norm):
     y_dtype = autocast_dtype() or torch.promote_types(residual.dtype, norm.weight.dtype)
     return add_rmsnorm(residual, delta, norm.weight, norm.variance_epsilon, y_dtype)
@@ -24,20 +30,25 @@ def _efficient_attention_operator():
             "int custom_mask_type, bool compute_log_sumexp=False, *, float? scale=None"
         )
         if not schema.startswith(expected_schema):
+            _varlen_why(f"schema differs: {schema}")
             return None
         names = [argument.name for argument in operator._schema.arguments]
         expected = ["query", "key", "value", "bias", "cu_seqlens_q", "cu_seqlens_k",
                     "max_seqlen_q", "max_seqlen_k", "dropout_p", "custom_mask_type",
                     "compute_log_sumexp"]
         if names[:len(expected)] != expected or names[len(expected)] != "scale":
+            _varlen_why(f"argument names differ: {names}")
             return None
         if not operator._schema.arguments[len(expected)].kwarg_only:
+            _varlen_why("scale is not keyword-only")
             return None
         if not torch._C._dispatch_has_kernel_for_dispatch_key(
                 "aten::_efficient_attention_forward", "Autograd"):
+            _varlen_why("no Autograd kernel for the operator")
             return None
         return operator
-    except (AttributeError, IndexError, RuntimeError, TypeError):
+    except (AttributeError, IndexError, RuntimeError, TypeError) as exc:
+        _varlen_why(f"operator lookup raised {exc!r}")
         return None
 
 
@@ -194,6 +205,8 @@ def patch_qwen2_layer_tail():
                     and getattr(self.config, "num_attention_heads", 0)
                     % getattr(self.config, "num_key_value_heads", 1) == 0
                 )
+                if not varlen_active:
+                    _varlen_why("batch/config conditions not met (right padding, sliding window, dropout, cos shape)")
                 if varlen_active:
                     varlen_operator = _efficient_attention_operator()
                     varlen_active = varlen_operator is not None
@@ -226,6 +239,7 @@ def patch_qwen2_layer_tail():
                             or k_rows.shape[-1] != kv_heads * attention.head_dim
                             or v_rows.shape[-1] != kv_heads * attention.head_dim):
                         varlen_active = False
+                        _varlen_why("dtype/shape of q,k,v projections not as expected")
                     else:
                         try:
                             query = q_rows.view(-1, q_heads, attention.head_dim).unsqueeze(0)
