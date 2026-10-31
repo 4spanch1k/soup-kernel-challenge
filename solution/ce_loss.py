@@ -173,4 +173,10 @@ def chunked_head_loss(hidden, weight, labels, attention_mask=None, denominator=N
     """`hidden` [B, T, H] (any float dtype), `weight` [V, H] already in the matmul dtype (fp16),
     `labels` [B, T] with -100 on unsupervised positions, `attention_mask` [B, T] or None.
     `denominator` is Trainer's num_items_in_batch; None means the number of labelled tokens."""
+    requested = os.environ.get("SOUP_X_HEAD_CHUNK")
+    if requested is not None:
+        value = int(requested)
+        if value not in (64, 128, 256, 512, 1024):
+            raise ValueError("unsupported experimental head chunk")
+        chunk = value
     return ChunkedHeadLoss.apply(hidden, weight, labels, attention_mask, denominator, chunk)
