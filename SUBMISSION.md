@@ -7,7 +7,7 @@
 - Kaggle-measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
 - Public Kaggle notebook: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146 (saved version 1, all checks passed).
 - Demo video (up to 3 minutes): TODO — add the public video link.
-- Presentation: TODO — add the presentation link.
+- Presentation: [Soup Kernel Challenge — mononyx](https://pitch.com/v/soup-kernel-challenge-mononyx-wbjvqz).
 
 ## Team
 
@@ -86,8 +86,8 @@ Colab repeat check, another seed (2026) and two runs per side (jury-like): all 1
 
 Describe the optimized operations and kernel ideas, base-versus-solution time and memory, eval
 loss, the limits of one Kaggle pair on public data, rejected experiments, and next steps. The
-video and presentation drafts are `docs/DEMO_VIDEO_SCRIPT.md` and `docs/PRESENTATION_OUTLINE.md`;
-both must be recorded and linked above before final submission.
+video draft is `docs/DEMO_VIDEO_SCRIPT.md`; record it and add its public link above before final
+submission. The presentation is linked above.
 
 ## Limitations
 
