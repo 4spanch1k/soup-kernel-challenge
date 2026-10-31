@@ -1,0 +1,258 @@
+Source: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run/log?scriptVersionId=363982146
+Captured from the Kaggle log viewer after all checks passed.
+
+Time
+	
+#
+	
+Log Message
+
+6.3s	0	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+
+6.3s	1	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+
+6.3s	2	0.00s - to python to disable frozen modules.
+
+6.3s	3	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+
+6.9s	4	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+
+6.9s	5	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+
+6.9s	6	0.00s - to python to disable frozen modules.
+
+6.9s	7	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+
+8.2s	8	Tesla T4
+
+8.2s	9	Tesla T4
+
+8.2s	10	
+
+16.6s	11	No GITHUB_TOKEN secret, cloning without it: BackendError
+
+17.2s	12	b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16 Merge pull request #11 from 4spanch1k/d/seed-check
+
+17.2s	13	
+
+20.8s	14	
+README.md:   0%|                                    | 0.00/1.79k [00:00<?, ?B/s]
+README.md: 100%|███████████████████████████| 1.79k/1.79k [00:00<00:00, 1.05MB/s]
+
+20.9s	15	Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+21.7s	16	
+
+22.3s	17	
+kaz_instructions.json: reconstructing file:   0%|  |  0.00B / 35.6MB            [A
+kaz_instructions.json: downloading bytes:                   |  0.00B            
+kaz_instructions.json: downloading bytes:                   | 61.7kB            
+kaz_instructions.json: downloading bytes: ███▉              | 7.85MB,   ???B/s  
+
+22.3s	18	
+kaz_instructions.json: reconstructing file: 100%|██| 35.6MB / 35.6MB            [A
+kaz_instructions.json: downloading bytes: ██████████████████| 15.4MB, 1.51MB/s  
+kaz_instructions.json: downloading bytes: ██████████████████| 15.4MB, 1.51MB/s  
+
+22.3s	19	
+kaz_instructions.json: reconstructing file: 100%|██| 35.6MB / 35.6MB, 3.51MB/s  
+
+24.2s	20	
+Generating train split: 0 examples [00:00, ? examples/s]
+Generating train split: 52201 examples [00:01, 27205.37 examples/s]
+Generating train split: 52201 examples [00:01, 26959.88 examples/s]
+
+24.2s	21	wrote 256 training rows and 256 eval rows to /kaggle/working/repo/data
+
+69.2s	22	.................................................                        [100%]
+
+69.2s	23	=============================== warnings summary ===============================
+
+69.2s	24	solution/test_ce_loss.py::test_zero_denominator_gives_zero_not_nan[0.0]
+
+69.2s	25	  /kaggle/working/repo/solution/test_ce_loss.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+
+69.2s	26	  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+
+69.2s	27	    assert float(loss) == 0.0 and torch.isfinite(h.grad).all()
+
+69.2s	28	
+
+69.2s	29	solution/test_nf4_dequant.py: 14 warnings
+
+69.2s	30	  /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+
+69.2s	31	    warnings.warn(
+
+69.2s	32	
+
+69.2s	33	-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+69.2s	34	49 passed, 15 warnings in 43.04s
+
+97.9s	35	[run_task] warm-up done in 22.54 s
+
+97.9s	36	[run_task] base_1: training ...
+
+185.8s	37	[run_task] base_1: ok, 87.77 s, peak 14345 MiB
+
+185.8s	38	[run_task] solution_1: training ...
+
+248.0s	39	[run_task] solution_1: ok, 62.1 s, peak 5441 MiB
+
+248.0s	40	[run_task] eval base ...
+
+291.4s	41	[run_task] eval solution ...
+
+6.3s	42	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+
+6.3s	43	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+
+6.3s	44	0.00s - to python to disable frozen modules.
+
+6.3s	45	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+
+6.9s	46	0.00s - Debugger warning: It seems that frozen modules are being used, which may
+
+6.9s	47	0.00s - make the debugger miss breakpoints. Please pass -Xfrozen_modules=off
+
+6.9s	48	0.00s - to python to disable frozen modules.
+
+6.9s	49	0.00s - Note: Debugging will proceed. Set PYDEVD_DISABLE_FILE_VALIDATION=1 to disable this validation.
+
+357.5s	50	/usr/local/lib/python3.13/dist-packages/mistune.py:435: SyntaxWarning: invalid escape sequence '\|'
+
+357.5s	51	  cells[i][c] = re.sub('\\\\\|', '|', cell)
+
+357.6s	52	/usr/local/lib/python3.13/dist-packages/nbconvert/filters/filter_links.py:36: SyntaxWarning: invalid escape sequence '\_'
+
+357.6s	53	  text = re.sub(r'_', '\_', text) # Escape underscores in display text
+
+358.4s	54	[NbConvertApp] Converting notebook __notebook__.ipynb to notebook
+
+358.5s	55	[NbConvertApp] Writing 15587 bytes to __notebook__.ipynb
+
+361.3s	56	[NbConvertApp] Converting notebook __notebook__.ipynb to html
+
+361.8s	57	[NbConvertApp] Writing 293048 bytes to __results__.html
+
+8.2s	58	Tesla T4
+
+8.2s	59	Tesla T4
+
+8.2s	60	
+
+16.6s	61	No GITHUB_TOKEN secret, cloning without it: BackendError
+
+17.2s	62	b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16 Merge pull request #11 from 4spanch1k/d/seed-check
+
+17.2s	63	
+
+20.8s	64	
+README.md:   0%|                                    | 0.00/1.79k [00:00<?, ?B/s]
+README.md: 100%|███████████████████████████| 1.79k/1.79k [00:00<00:00, 1.05MB/s]
+
+20.9s	65	Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+
+21.7s	66	
+
+22.3s	67	
+kaz_instructions.json: reconstructing file:   0%|  |  0.00B / 35.6MB            [A
+kaz_instructions.json: downloading bytes:                   |  0.00B            
+kaz_instructions.json: downloading bytes:                   | 61.7kB            
+kaz_instructions.json: downloading bytes: ███▉              | 7.85MB,   ???B/s  
+
+22.3s	68	
+kaz_instructions.json: reconstructing file: 100%|██| 35.6MB / 35.6MB            [A
+kaz_instructions.json: downloading bytes: ██████████████████| 15.4MB, 1.51MB/s  
+kaz_instructions.json: downloading bytes: ██████████████████| 15.4MB, 1.51MB/s  
+
+22.3s	69	
+kaz_instructions.json: reconstructing file: 100%|██| 35.6MB / 35.6MB, 3.51MB/s  
+
+24.2s	70	
+Generating train split: 0 examples [00:00, ? examples/s]
+Generating train split: 52201 examples [00:01, 27205.37 examples/s]
+Generating train split: 52201 examples [00:01, 26959.88 examples/s]
+
+24.2s	71	wrote 256 training rows and 256 eval rows to /kaggle/working/repo/data
+
+69.2s	72	.................................................                        [100%]
+
+69.2s	73	=============================== warnings summary ===============================
+
+69.2s	74	solution/test_ce_loss.py::test_zero_denominator_gives_zero_not_nan[0.0]
+
+69.2s	75	  /kaggle/working/repo/solution/test_ce_loss.py:104: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+
+69.2s	76	  Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:836.)
+
+69.2s	77	    assert float(loss) == 0.0 and torch.isfinite(h.grad).all()
+
+69.2s	78	
+
+69.2s	79	solution/test_nf4_dequant.py: 14 warnings
+
+69.2s	80	  /usr/local/lib/python3.13/dist-packages/torch/jit/_script.py:365: DeprecationWarning: `torch.jit.script_method` is deprecated. Please switch to `torch.compile` or `torch.export`.
+
+69.2s	81	    warnings.warn(
+
+69.2s	82	
+
+69.2s	83	-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+
+69.2s	84	49 passed, 15 warnings in 43.04s
+
+97.9s	85	[run_task] warm-up done in 22.54 s
+
+97.9s	86	[run_task] base_1: training ...
+
+185.8s	87	[run_task] base_1: ok, 87.77 s, peak 14345 MiB
+
+185.8s	88	[run_task] solution_1: training ...
+
+248.0s	89	[run_task] solution_1: ok, 62.1 s, peak 5441 MiB
+
+248.0s	90	[run_task] eval base ...
+
+291.4s	91	[run_task] eval solution ...
+
+335.2s	92	
+
+335.2s	93	=== result ===
+
+335.2s	94	base      time     87.8 s   peak  14345 MiB   eval loss 2.04964
+
+335.2s	95	solution  time     62.1 s   peak   5441 MiB   eval loss 2.04952
+
+335.2s	96	speedup 1.413x   memory base/solution 2.636x   eval loss vs base -0.006 %
+
+335.2s	97	written: /kaggle/working/repo/runs/result.json
+
+354.5s	98	PASS  1. every base and solution run finished                                            1 base and 1 solution runs of 1 each
+
+354.5s	99	PASS  2. no ready-made kernel libraries                                                  loaded: none; imported in solution/: none; packages changed during the run: none
+
+354.5s	100	PASS  3. own @triton.jit kernels in solution/ run in training                            add_rmsnorm_bwd_kernel (solution/add_rmsnorm.py), add_rmsnorm_fwd_kernel (solution/add_rmsnorm.py), head_stats_kernel (solution/ce_loss.py), nf4_dequant_kernel (solution/nf4_dequant.py), rmsnorm_bwd_kernel (solution/rmsnorm.py), rmsnorm_fwd_kernel (solution/rmsnorm.py), rope_kernel (solution/rope.py); the example's kernels do not count, under any name: example_swiglu_fwd_kernel, example_swiglu_bwd_kernel
+
+354.5s	101	PASS  4. own kernels together take >= 5% of the training time                            10.8% of the training time (lowest of 1 runs, steps 3+)
+
+354.5s	102	PASS  5. same task and Soup outputs (steps, adapter, settings, tokens, metrics, rewind)  identical within tolerance
+
+354.5s	103	PASS  6. loss curve follows the base                                                     solution_1: first step 0.03%, mean of all steps 0.04% (max 1% and 3%)
+
+354.5s	104	PASS  7. quality: eval loss at most 0.5% above the base                                  -0.006%
+
+354.5s	105	PASS  8. not worse than the base on time or memory (10% margin)                          time x0.708, memory x0.379 of the base
+
+354.5s	106	PASS  9. clean measurement (a T4, idle GPUs, one GPU, harness allocator, peaks agree)    clean
+
+354.5s	107	PASS  10. Soup regression tests with your patches                                        79 passed, 14 warnings in 0.51s
+
+354.5s	108	
+
+354.5s	109	ALL CHECKS PASSED
+
+354.8s	110	speedup 1.413x (counts as 1.413), memory base/solution 2.636x (counts as 2.636), eval loss vs base -0.006 %, all checks passed on this result: True
+
+354.8s	111	Speed and memory points depend on the best admitted team: 35 * ln(s) / ln(best s) and 30 * ln(m) / ln(best m).

@@ -1,25 +1,27 @@
-# Submission: TODO — team name
+# Submission: mononyx
 
 ## Links
 
-- Repository: https://github.com/4spanch1k/soup-kernel-challenge
-- Final commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16 (`main` after PR #11). `solution/` is byte-identical to commit `29184d9`, the code measured on the T4; only README/SUBMISSION text changed since.
-- Public Kaggle notebook: TODO — add the saved public Kaggle notebook URL (not yet available).
+- Repository: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx
+- Submission code commit: https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2. The following documentation commit only records this link and checklist status.
+- Kaggle-measured source commit: https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16. The submission's `solution/` is byte-identical to this commit and `29184d9`, and matches the solution SHA-256 in the saved Kaggle checks.
+- Public Kaggle notebook: https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146 (saved version 1, all checks passed).
 - Demo video (up to 3 minutes): TODO — add the public video link.
-- Presentation: TODO — add the presentation link.
+- Presentation: [Soup Kernel Challenge — mononyx](https://pitch.com/v/soup-kernel-challenge-mononyx-wbjvqz).
 
 ## Team
 
-TODO — add team members, roles, GitHub/Kaggle accounts, and captain contact.
+Two participants. Telegram handles, roles, GitHub and Kaggle accounts supplied by the captain.
 
 | Name | Role | GitHub | Kaggle | Contact (captain) |
 |---|---|---|---|---|
-| TODO | TODO | TODO | TODO | TODO |
+| @yujio2x (Telegram) | Captain, backend developer | https://github.com/yujio2x | https://www.kaggle.com/yujio2x | https://t.me/yujio2x |
+| @yokosowe (Telegram) | Prompt engineer | https://github.com/4spanch1k | https://www.kaggle.com/apanch1k | — |
 
 ## Our kernels
 
-Individual kernel shares were not recorded. The combined share for our kernels was 9.6% of
-training time in check 4 of the final run.
+Individual kernel shares are not listed here. The combined share for our kernels was 10.8% of
+training time in check 4 of the Kaggle run (steps 3+).
 
 | Kernel (`@triton.jit` name) | File | What it replaces | Share of training time |
 |---|---|---|---|
@@ -28,7 +30,7 @@ training time in check 4 of the final run.
 | `rope_kernel` | `solution/rope.py` | Qwen2 rotary embedding operations | Not measured individually |
 | `nf4_dequant_kernel` | `solution/nf4_dequant.py` | bitsandbytes nested NF4 dequantization | Not measured individually |
 | `add_rmsnorm_fwd_kernel`, `add_rmsnorm_bwd_kernel` | `solution/add_rmsnorm.py`, `solution/layer_tail.py` | Residual adds followed by RMSNorm (post-attention and layer boundaries) | Not measured individually |
-| **All our kernels** | — | — | **9.6% combined** |
+| **All our kernels** | — | — | **10.8% combined on Kaggle** |
 
 The starter kit's `solution/swiglu.py` example remains active but is not our kernel and is not
 counted. The online softmax idea is from Milakov and Gimelshein (2018); the chunked linear
@@ -39,9 +41,31 @@ is not enabled; only its `STEP_ATTR` hand-off name is reused for the rewind reco
 
 ## Results
 
+### Kaggle T4, saved version 1
+
+One base and one solution run on 30 October 2026, commit `b587c5c`, using the unchanged harness.
+
+| Metric | Base Soup | Ours | Ratio / change |
+|---|---:|---:|---:|
+| Whole `soup train`, seconds | 87.77 | 62.10 | 1.413x speedup |
+| Peak GPU memory, MiB | 14,345 | 5,441 | 2.636x lower |
+| Eval loss | 2.04964 | 2.04952 | -0.006% vs base |
+
+- [x] All 10 harness checks passed on Kaggle T4.
+- [x] 49 solution tests and 79 Soup regression tests passed.
+- [x] Public saved Kaggle notebook, pinned to `b587c5c` per the finish checklist.
+- [x] Own-kernel share 10.8%; first-step loss gap 0.03%; mean loss gap 0.04%.
+
+Evidence: the public notebook above, `docs/kaggle/result.json`, `docs/kaggle/checks.json`
+and `docs/kaggle/version-1-log.txt`. Both the result hash and solution hash were verified
+against the values in `checks.json` after download.
+
+### Earlier Colab T4 measurements
+
 One base run and one solution run, measured by `harness/run_task.py` and checked by
-`harness/check_rules.py` on a Google Colab Tesla T4, branch `m/embed16`, commit `4749158`.
-These are Colab results, not Kaggle results.
+`harness/check_rules.py` on a Google Colab Tesla T4, branch `m/embed16`, commit `4749158`
+(`solution/` is identical to the Kaggle-measured commit). These are Colab results, not Kaggle
+results; a two-run repeat with another seed follows below.
 
 | Metric | Base Soup | Ours | Ratio / change |
 |---|---:|---:|---:|
@@ -54,21 +78,28 @@ These are Colab results, not Kaggle results.
 
 Check 4: 9.6% of training time. Check 6's loss-curve gap was 0.03% on the first step and 0.04% on
 average. Check 8 measured time and memory at 0.831x and 0.379x of base. Soup's 79 regression
-tests passed with `apply()` active; all 49 solution tests passed on the T4. Across development
-runs the speedup against the same-session base was 1.07x-1.24x.
+tests passed with `apply()` active; all 49 solution tests passed on the T4.
 
-Repeat check, another seed and two runs per side (jury-like): all 10 checks pass; 80.8 s -> 66.2 s (1.221x), 14,339 -> 5,419 MiB (2.646x), eval loss +0.016%, kernels 8.8%.
+Colab repeat check, another seed (2026) and two runs per side (jury-like): all 10 checks pass; 80.8 s -> 66.2 s (1.221x), 14,339 -> 5,419 MiB (2.646x), eval loss +0.016%, kernels 8.8%.
 
 ## Presentation covers
 
 Describe the optimized operations and kernel ideas, base-versus-solution time and memory, eval
-loss, the Colab-versus-Kaggle measurement limit, and next steps.
+loss, the limits of one Kaggle pair on public data, rejected experiments, and next steps. The
+video draft is `docs/DEMO_VIDEO_SCRIPT.md`; record it and add its public link above before final
+submission. The presentation is linked above.
 
 ## Limitations
 
-The measurements are one run per side on Colab, not Kaggle. The team's Kaggle account lacks phone
-verification for GPU and Internet access; the jury's hidden rows and two runs per side may change
-the results. Check 4 passed by about 4.6 percentage points in the final run. MLP recomputation is off by default
-and was not measured. RMSNorm outputs fp16 under autocast, with consumer gradients summed in
-fp16; Soup's GradScaler is enabled and the mean loss-curve gap was 0.04%. The kernels use Triton
-3.x features and PyTorch 2.4 or newer APIs.
+Kaggle has one measured run per side on public data; the earlier Colab measurements (one run per
+side, and a two-run repeat with another seed) are reported separately above. The jury's hidden
+rows and two runs per side may change the results. Check 4 (at least 5% of training time) measured
+10.8% on Kaggle, which is 5.8 percentage points above the requirement; it was 9.6% in the earlier
+Colab run and 8.8% in the lowest run of the Colab repeat. MLP recomputation remains off: a Colab
+measurement showed 16% more time for 27% less memory. Other ideas we measured and rejected
+(per-sample causal attention, a fused NF4 GEMM, a fused LoRA path, start-up and model-loading
+changes) are tabulated in `README.md` under "Tried and rejected". RMSNorm outputs fp16 under
+autocast, with consumer gradients summed in fp16; Soup's GradScaler is enabled and the measured
+mean loss-curve gap was 0.04%. Tested environment (Kaggle): Python 3.13.15, torch 2.11.0+cu128,
+Triton 3.6.0; the kernels use Triton 3.x features and were not run on other torch or Triton
+versions.

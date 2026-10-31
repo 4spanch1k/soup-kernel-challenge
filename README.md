@@ -1,11 +1,20 @@
-# Soup Kernel Challenge: Our Solution
+# Soup Kernel Challenge: mononyx
 
 We optimized the fixed `soup train` run with our own Triton kernels. The run remains Soup CLI
 0.77.0 with Qwen2.5-1.5B-Instruct, NF4 weights, LoRA r=16 on `q_proj` and `v_proj`, and fp16 on a
 Tesla T4. The fixed task uses batch 4, up to 512 tokens and 64 steps. We did not change the model,
 data, batches, training steps, optimizer, schedule, LoRA settings, or Soup switches.
 
-**Public Kaggle notebook:** TODO — add the saved public Kaggle notebook URL (not yet available).
+**Result in one line (Kaggle T4, saved version 1):** 87.77 s → 62.10 s (1.413x faster), 14,345 → 5,441 MiB
+(2.636x less memory), eval loss 2.04964 → 2.04952 (-0.006%), all 10 harness checks passed, own kernels
+10.8% of training time.
+
+**Team repository:** [BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
+
+**Submission code snapshot:** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
+
+**Public Kaggle notebook:** [saved version 1, with results](https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run?scriptVersionId=363982146).
+The notebook pins [b587c5c](https://github.com/4spanch1k/soup-kernel-challenge/commit/b587c5cc2ed5cc2d9457ffc98677cd51cd0beb16), as specified in `docs/FINISH_CHECKLIST.md`.
 
 ## What we changed
 
@@ -50,9 +59,38 @@ included in our kernel share.
 
 ## Results
 
+### Kaggle Tesla T4, 30 October 2026
+
+Saved version 1 ran the imported notebook with **Save & Run All**, Internet enabled and the
+GPU T4 x2 accelerator selected. The unchanged harness restricts each measured process to one
+GPU. One base and one solution run completed in the same session, using commit `b587c5c`.
+
+| Metric | Base Soup | Ours | Result |
+|---|---:|---:|---:|
+| Whole `soup train`, seconds | 87.77 | 62.10 | 1.413x speedup |
+| Peak GPU memory, MiB | 14,345 | 5,441 | 2.636x lower |
+| Eval loss | 2.04964 | 2.04952 | -0.006% vs base |
+
+**All 10 harness checks passed.** All 49 solution tests and all 79 Soup regression tests
+passed. Own kernels accounted for 10.8% of training time (steps 3+). The loss-curve gap was
+0.03% on the first step and 0.04% on average. Check 5 confirmed the task and Soup outputs within
+tolerance; check 9 confirmed a clean measurement. The complete saved notebook took 6m 3s,
+including setup, tests and evaluation; that duration is separate from the measured training time.
+
+Evidence: [saved Kaggle logs](https://www.kaggle.com/code/yujio2x/soup-kernel-challenge-t4-final-run/log?scriptVersionId=363982146),
+[`result.json`](docs/kaggle/result.json), [`checks.json`](docs/kaggle/checks.json)
+and [`version-1-log.txt`](docs/kaggle/version-1-log.txt).
+The downloaded result matches the SHA-256 recorded in `checks.json`; the local `solution/`
+also matches its recorded solution SHA-256.
+These are a single measured pair, not the jury's hidden-data result.
+
+### Earlier Colab Tesla T4 measurements
+
 These are one base run and one solution run from `harness/run_task.py`, followed by
-`harness/check_rules.py`, on a Google Colab Tesla T4. The measured solution was branch
-`m/embed16`, commit `4749158` (`solution/` of this repository is that code).
+`harness/check_rules.py`, on a Google Colab Tesla T4; a two-run repeat with another seed is
+reported further below. The measured solution was branch `m/embed16`, commit `4749158`; the
+`solution/` directory is byte-identical in that commit, in `29184d9` and in the Kaggle-measured
+`b587c5c`.
 
 | Metric | Base Soup | Ours | Result |
 |---|---:|---:|---:|
@@ -66,7 +104,9 @@ and memory were 0.831x and 0.379x of base (check 8). Soup's 79 regression tests 
 `apply()` active (check 10), and all 49 solution tests passed on the T4.
 
 How we got there on the same machine (one run each; Colab speed drifts between sessions, base time
-was 75.9 s to 80.9 s, so compare rows by their speedup against the base of the same run):
+was 75.9 s to 80.9 s, so compare rows by their speedup against the base of the same run; the
+speedup against the same-session base grew from about 1.07x in the first row to 1.24x in the
+packed-layers row):
 
 | Step | Time, s (base) | Peak, MiB | Check 4 |
 |---|---:|---:|---|
@@ -88,32 +128,55 @@ MLP recomputation (`solution/recompute.py`, our own `torch.utils.checkpoint`, no
 measured on the T4 in one session, solution only: off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB. It
 costs 16% time for 27% memory, so it stays off.
 
-### Repeat with another seed, two runs per side (the way the jury runs it)
+### Earlier Colab repeat with another seed, two runs per side (the way the jury runs it)
 
 `python harness/run_task.py --repeats 2 --seed 2026`, then `check_rules.py`, on the same code (commit
 `29184d9`), Google Colab Tesla T4. **All 10 checks passed**: base 80.8 s / 14,339 MiB, ours 66.2 s /
 5,419 MiB (1.221x faster, 2.646x less memory), eval loss 2.05134 -> 2.05167 (+0.016%, limit +0.5%),
 our kernels 8.8% of training time in the lowest run, loss-curve gap 0.00-0.01% (first step) and
-0.01-0.05% (mean) in all four extra runs. The result does not depend on the seed we developed with.
+0.01-0.05% (mean) in all four extra runs. This also passed on a second seed; it does not establish
+performance on the jury's hidden rows.
 
 ## Limits
 
-- These results are from Colab, not Kaggle. The team's Kaggle account lacks phone verification
-  required for GPU and Internet access, so a Kaggle run has not been completed and may differ.
-- Each side has one measured run. The jury uses hidden rows and two runs per side; results can
-  move. Check 4 passed by about 4.6 percentage points in the final run (9.6% against the 5% limit).
-- `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16% time for 27% memory in our measurement.
+- Kaggle gives one measured run per side on public data. The earlier Colab measurements are
+  reported separately above: one run per side, plus a two-run repeat with another seed. None of
+  them is the jury's hidden-data result.
+- The jury uses hidden rows and two runs per side, so results can move. Check 4 (own kernels at
+  least 5% of training time) measured 10.8% on Kaggle, 9.6% in the earlier Colab run and 8.8% in
+  the lowest run of the Colab seed repeat; on Kaggle that is 5.8 percentage points above the
+  requirement.
+- `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16%
+  time for 27% memory in our measurement.
 - RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
   Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.
-- The kernels use Triton 3.x features including `tl.interleave` and `tl.argmax` in loops, and
-  PyTorch APIs available in torch 2.4 or newer.
+- Tested environment (Kaggle, from `docs/kaggle/README.md`): Python 3.13.15, torch 2.11.0+cu128,
+  Triton 3.6.0, Tesla T4. The kernels use Triton 3.x features including `tl.interleave` and
+  `tl.argmax` in loops; we have not run them on other torch or Triton versions.
+
+## Tried and rejected
+
+Measured on a Colab T4 with the full harness, each against its own base from the same session
+(details in `docs/CODEX_VS_CLAUDE.md` and `docs/HANDOFF.md`). None of these is in `solution/`.
+
+| Idea | Measured result | Decision |
+|---|---|---|
+| MLP recomputation (`solution/recompute.py`) | off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB: 16% time for 27% memory | stays off |
+| Per-sample causal attention on packed rows (`q/varlen-attn`) | 66.9 / 68.3 s against 61.8 / 68.0 s for `main` (two alternating runs each); peak memory the same, 5,441 MiB | no gain, not merged |
+| NF4 GEMM as one Triton kernel (`c2/fused4bit`) | 10-200 times slower than dequantization plus cuBLAS | rejected |
+| Fused LoRA path (`l/lora-fuse`) | patch never fired (PEFT uses its own 4-bit LoRA class); 63.2 s / 5,441 MiB, same as `main`; micro-benchmark 1.26 ms against 0.94 ms per q call | rejected |
+| Shorter start-up (`s/startup`) | cold Triton compile of all our kernels is 4.7 s; a warm-up thread could hide it but risks reading as background work | not used |
+| Faster model loading (`w/load-phase`) | no value-preserving saving above 0.5 s | not used |
 
 ## How to run
 
-The repository is public at
-[github.com/4spanch1k/soup-kernel-challenge](https://github.com/4spanch1k/soup-kernel-challenge).
-For Kaggle, import `notebook/soup_kernel_challenge.ipynb` and select a T4 GPU with Internet
-enabled. Or clone the public repository in one notebook cell:
+The submission repository is
+[BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
+The public development repository below supplies the exact measured commit used by the saved
+Kaggle notebook. `solution/` is unchanged in the submission copy.
+For Kaggle, open the saved notebook above, or import `notebook/soup_kernel_challenge.ipynb`,
+select T4 with Internet enabled, set `COMMIT = "b587c5c"` and use Save & Run All.
+Or clone the public development repository in one notebook cell:
 
 ```python
 !git clone https://github.com/4spanch1k/soup-kernel-challenge.git /kaggle/working/repo
