@@ -30,8 +30,8 @@ def _install_compile_log():
         return
 
     def hook(*args, **kwargs):
-        fn = kwargs.get("fn")
-        name = getattr(getattr(fn, "fn", fn), "__name__", "?")
+        fn = kwargs.get("fn")  # Triton 3.6 passes a JitFunctionInfo with .name
+        name = getattr(fn, "name", None) or getattr(getattr(fn, "fn", fn), "__name__", "?")
         _log(f"compiled {name} manual_warmup={kwargs.get('is_manual_warmup')} "
              f"already={kwargs.get('already_compiled')}")
 
