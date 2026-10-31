@@ -1,8 +1,10 @@
 # Presentation outline
 
-Main numbers come from the public **Kaggle Tesla T4** run (saved version 1, 30 October 2026,
-commit `b587c5c`). Google Colab results are shown only as "earlier measurements". Every value
-below is taken from `README.md` or `docs/kaggle/checks.json`.
+Final numbers come from one paired run per environment on source commit `d881159`: an interactive
+Kaggle Tesla T4 session and a Colab Tesla T4 session. Do not compare raw seconds across platforms;
+compare base and solution within each session. The public Kaggle saved version 1 remains on pre-fix
+commit `b587c5c` and is historical evidence. Values are taken from `README.md`, `SUBMISSION.md`,
+and current-run screenshots in `docs/kaggle/screenshots/`.
 
 ## Slide 1 — Fixed task, unchanged training setup
 
@@ -11,9 +13,9 @@ below is taken from `README.md` or `docs/kaggle/checks.json`.
 - Batch 4, up to 512 tokens and 64 steps, fp16 on a Tesla T4.
 - Model, data, batches, optimizer, schedule, LoRA settings, and Soup switches stayed fixed.
 
-**Speaker note:** “We optimized implementation details inside the fixed training task. The final measurement is a public Kaggle notebook on a Tesla T4.”
+**Speaker note:** “We optimized implementation details inside the fixed training task. The final code was measured on T4s in Colab and an interactive Kaggle session; the public saved Kaggle notebook still shows the earlier code.”
 
-**Visual:** A compact task card with the model, training setup, and GPU; label the environment “Kaggle T4”.
+**Visual:** A compact task card with the model, training setup, and GPU; label the environments “Kaggle T4” and “Colab T4”.
 
 ## Slide 2 — What the baseline spends time and memory on
 
@@ -62,35 +64,32 @@ below is taken from `README.md` or `docs/kaggle/checks.json`.
 
 **Visual:** A flow diagram from hidden states to token chunks, then to loss, entropy, accuracy, and hidden gradient. Show the temporary logits chunk being reused and released.
 
-## Slide 6 — Base versus our measured run (Kaggle T4)
+## Slide 6 — Final paired T4 results (Kaggle and Colab)
 
-- Whole `soup train`: 87.77 seconds base, 62.10 seconds ours; 1.413x speedup.
-- Peak GPU memory: 14,345 MiB base, 5,441 MiB ours; 2.636x lower.
-- Eval loss: 2.04964 base, 2.04952 ours; -0.006% versus base.
-- One base run and one solution run, saved version 1 of the public Kaggle notebook.
-- Earlier measurement (Colab T4, one pair): 76.4 s base, 63.5 s ours, 1.203x; memory 14,345 → 5,441 MiB; eval loss 2.04965 → 2.04953.
+- Kaggle T4, current source `d881159`: 98.1 s base, 58.5 s ours; 1.677x; 14,345 → 4,591 MiB; eval loss +0.009%.
+- Colab T4, same source: 77.3 s base, 54.1 s ours; 1.428x; 14,345 → 4,591 MiB; eval loss +0.010%.
+- Each figure is one base/solution pair in a single session; cross-platform seconds are not comparable.
+- Public saved Kaggle version 1 (`b587c5c`) is an earlier run: 87.77 → 62.10 s, 14,345 → 5,441 MiB, eval loss −0.006%.
 
-**Speaker note:** “Time and peak memory improved while eval loss stayed essentially unchanged. This is a single measured pair, not a stable average. Our own time was similar on both platforms (62.10 s and 63.5 s); the Kaggle base was slower (87.77 s against 76.4 s).”
+**Speaker note:** “Both paired runs passed the harness. Each is a single measurement, not a stable average. Compare each solution only with its same-session base; do not compare raw seconds between Kaggle and Colab.”
 
-**Visual:** A base-versus-ours table and paired bar charts for elapsed seconds and peak GPU memory. Put exact values on the bars; show the Colab pair in a smaller, greyed “earlier measurement” panel.
+**Visual:** Two equal cards for Kaggle and Colab with base/solution time, speedup, memory, eval-loss delta and checks. Add a note that the public saved Kaggle notebook is pre-fix; its historical figures are documented in `README.md`.
 
-## Slide 7 — Harness checks and regression evidence
+## Slide 7 — Current Kaggle output and harness evidence
 
-- All 10 harness checks passed on Kaggle T4.
-- Check 4: our kernels took 10.8% of training time (steps 3+), against the 5% requirement, a margin of 5.8 percentage points.
-- Check 6: loss-curve gap 0.03% on the first step and 0.04% on average.
-- Check 8: time and memory at x0.708 and x0.379 of base.
-- Checks 5 and 9: same task and Soup outputs within tolerance; clean measurement.
-- 49 solution tests and 79 Soup regression tests passed.
+- Show the current interactive Kaggle T4 result screenshot: 98.1 → 58.5 s, 14,345 → 4,591 MiB, eval loss +0.009%.
+- Show the current harness summary screenshot: all 10 checks passed; check 8 time x0.596 and memory x0.320 of base; 79 Soup regression tests passed.
+- These screenshots are from updated code, not the older public saved version 1.
+- The public saved Kaggle notebook still shows commit `b587c5c`; disclose that difference.
 
-**Speaker note:** “The full check table passed on the public notebook run, and the evidence files are in the repository.”
+**Speaker note:** “These are current Kaggle screenshots from the interactive run. The saved public notebook is still the previous version, so the README calls out the distinction.”
 
-**Visual:** The recorded `check_rules.py` table with all statuses visible, plus callouts for checks 4, 6, and 8. Add a separate test-output strip for the Soup and solution suites.
+**Visual:** Two cropped Kaggle notebook screenshots: final run output and all-checks summary. Keep the older public notebook evidence out of this slide.
 
 ## Slide 8 — Limits, rejected ideas and honest status
 
 - Kaggle gives one measured run per side on public data; the jury's hidden rows and two runs per side can move the result.
-- Colab seed repeat (seed 2026, two runs per side): all 10 checks passed; 80.8 s → 66.2 s (1.221x), 14,339 → 5,419 MiB (2.646x less), eval loss +0.016%, kernels 8.8%.
+- Earlier Colab seed repeat (seed 2026, two runs per side, pre-fix code): all 10 checks passed; 80.8 s → 66.2 s (1.221x), 14,339 → 5,419 MiB (2.646x less), eval loss +0.016%, kernels 8.8%.
 - MLP recomputation is off: measured at 59.7 s / 6,321 MiB off and 69.3 s / 4,601 MiB on, which is 16% time for 27% memory.
 - RMSNorm consumer gradients are summed in fp16 under autocast; Soup's GradScaler is enabled, and the mean loss-curve gap was 0.04%.
 - Tried and rejected on the T4: per-sample causal attention (no gain), fused NF4 GEMM in one Triton kernel (10-200 times slower than cuBLAS), LoRA-path fusion (the patch never fired, so there was no gain).
@@ -113,10 +112,10 @@ below is taken from `README.md` or `docs/kaggle/checks.json`.
 ## Q&A preparation
 
 1. **Is the NF4 kernel really yours?** Yes. `solution/nf4_dequant.py` contains our `@triton.jit` decoder for packed NF4 values and nested scales; it replaces bitsandbytes dequantization only for supported nested NF4 states. We do not import a ready-made kernel library.
-2. **Why does eval loss not change?** It changes slightly: 2.04964 for base and 2.04952 for ours, or -0.006% versus base. The measured mean loss-curve gap was 0.04%.
+2. **Why does eval loss not change?** It changes slightly: +0.009% versus base in the Kaggle pair and +0.010% in the Colab pair, both within the 0.5% limit. The public saved version's earlier result was −0.006%.
 3. **How do you handle fp16 overflow?** The head's online log-sum-exp uses fp32 values and max subtraction; Soup's GradScaler remains enabled. We report the observed loss-curve gap and do not claim that overflow is impossible.
-4. **Why are there Colab numbers as well as Kaggle numbers?** Development measurements were taken on a Colab T4. The final public measurement is the saved Kaggle notebook (version 1). We report both and keep them separate.
+4. **Why are there Colab numbers as well as Kaggle numbers?** The final source was measured in one paired Colab T4 run and one paired interactive Kaggle T4 run. The saved public Kaggle version 1 still contains pre-fix code; each session is reported separately.
 5. **Does the recompute switch break the rules?** `solution/recompute.py` is our own optional MLP checkpointing, not Soup's forbidden `gradient_checkpointing` switch. It is off by default because it cost 16% time for 27% memory.
-6. **Will the speedup hold on the jury's run?** We do not know. Kaggle gave 1.413x in one pair (base 87.77 s, ours 62.10 s); Colab gave 1.203x in one pair (base 76.4 s, ours 63.5 s) and 1.221x in the seed repeat.
-7. **Do your kernels account for enough training time?** Yes in the measurement: 10.8% on Kaggle against the 5% requirement (9.6% on the earlier Colab run, 8.8% in the seed repeat). Hidden rows may change it.
+6. **Will the speedup hold on the jury's run?** We do not know. The current source gave 1.677x on one Kaggle pair and 1.428x on one Colab pair. The saved public Kaggle notebook shows the earlier 1.413x result.
+7. **Do your kernels account for enough training time?** The final Kaggle run passed all 10 checks, including the 5% kernel-share requirement. The final Colab run reported 13.1%; the older saved Kaggle run reported 10.8%. Hidden rows may change it.
 8. **Did you use Liger-Kernel, Cut Cross-Entropy, or Soup's `stream_loss_chunk`?** Their ideas or outputs informed the implementation, but those libraries and the Soup switch are not imported or enabled. The kernels are written in this repository.
