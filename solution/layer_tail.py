@@ -23,11 +23,20 @@ def patch_qwen2_layer_tail():
     def forward(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
                 inputs_embeds=None, use_cache=None, **kwargs):
         supplied_inputs_embeds = inputs_embeds
+        original_kwargs = dict(kwargs)
+        # PEFT's forward passes these three flags down as None; with their default values they change
+        # nothing, so they must not push every call onto the original path.
+        for name in ("output_attentions", "output_hidden_states"):
+            if kwargs.get(name) is None or kwargs.get(name) is False:
+                kwargs.pop(name, None)
+        if self.config.use_return_dict and kwargs.get("return_dict") in (None, True):
+            kwargs.pop("return_dict", None)
 
         def fallback():
             return original(self, input_ids=input_ids, attention_mask=attention_mask,
                             position_ids=position_ids, past_key_values=past_key_values,
-                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache, **kwargs)
+                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache,
+                            **original_kwargs)
 
         if ((input_ids is None) == (inputs_embeds is None)
                 or type(self) is not modeling_qwen2.Qwen2Model
