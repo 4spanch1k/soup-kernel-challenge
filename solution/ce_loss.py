@@ -17,6 +17,8 @@ Ideas: online softmax (Milakov & Gimelshein, 2018); computing the head and loss 
 Liger's fused linear cross-entropy and Apple's Cut Cross-Entropy). The code is written here.
 """
 
+import os
+
 import torch
 import torch.nn.functional as F
 import triton
@@ -110,10 +112,12 @@ def _forward(ctx, hidden, weight, labels, attention_mask, denominator, chunk):
             logits = buffer[:stop - start]
             torch.mm(rows[start:stop].to(weight.dtype), weight.t(), out=logits)
             lab_in_chunk = max(0, min(stop, n_lab) - start)
+            merge_variants = os.environ.get("SOUP_X_MERGE_VARIANTS") == "1"
             head_stats_kernel[(stop - start,)](
                 logits, row_target[start:stop], loss_rows[start:stop], entropy_rows[start:stop],
                 hit_rows[start:stop], logits.stride(0), vocab, BLOCK=BLOCK_V,
-                WRITE_GRAD=bool(need_grad and lab_in_chunk), num_warps=8)
+                WRITE_GRAD=bool(need_grad if merge_variants else need_grad and lab_in_chunk),
+                num_warps=8)
             if need_grad and lab_in_chunk:
                 grad_rows[start:start + lab_in_chunk] = torch.mm(logits[:lab_in_chunk], weight)
         total = loss_rows.sum()

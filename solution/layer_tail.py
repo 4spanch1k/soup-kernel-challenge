@@ -1,14 +1,25 @@
 """Fuse each Qwen2 MLP residual add with the norm at the next layer boundary."""
 
+import os
+
 import torch
 
 from .add_rmsnorm import MAX_WIDTH, add_rmsnorm
 from .amp import autocast_dtype
 
 
-def _fuse_add_norm(residual, delta, norm):
+def _call_with_checkpoint(function, *args, enabled):
+    if not enabled:
+        return function(*args)
+    from torch.utils.checkpoint import checkpoint
+
+    return checkpoint(function, *args, use_reentrant=False, preserve_rng_state=True)
+
+
+def _fuse_add_norm(residual, delta, norm, exact_residual=False):
     y_dtype = autocast_dtype() or torch.promote_types(residual.dtype, norm.weight.dtype)
-    return add_rmsnorm(residual, delta, norm.weight, norm.variance_epsilon, y_dtype)
+    return add_rmsnorm(residual, delta, norm.weight, norm.variance_epsilon, y_dtype,
+                       exact_residual)
 
 
 def patch_qwen2_layer_tail():
@@ -105,41 +116,66 @@ def patch_qwen2_layer_tail():
             residual = rows
             layer_input = self.layers[0].input_layernorm(residual)
             cos, sin = position_embeddings
+            attention_checkpoint = os.environ.get("SOUP_X_ATTN_CKPT", "0")
+            exact_residual = os.environ.get("SOUP_X_EXACT_RESID") == "1"
 
             for index, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
                 attention = layer.self_attn
-                q = attention.q_proj(layer_input)
-                k = attention.k_proj(layer_input)
-                v = attention.v_proj(layer_input)
-                q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
-                k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
-                v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
-                q = q.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                k = k.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                v = v.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
-                q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin)
-
                 attention_interface = modeling_qwen2.ALL_ATTENTION_FUNCTIONS.get_interface(
                     self.config._attn_implementation, modeling_qwen2.eager_attention_forward)
-                attn_out, _ = attention_interface(
-                    attention,
-                    q,
-                    k,
-                    v,
-                    causal_mask_mapping[self.config.layer_types[index]],
-                    dropout=0.0 if not attention.training else attention.attention_dropout,
-                    scaling=attention.scaling,
-                    sliding_window=attention.sliding_window,
-                )
-                attn_out = attn_out.reshape(batch * seq, -1).index_select(0, packed_idx)
-                attn_out = attention.o_proj(attn_out)
+
+                def attention_output(hidden, cos, sin, mask, checkpoint_sdpa,
+                                     attention=attention, attention_interface=attention_interface,
+                                     packed_idx=packed_idx, batch=batch, seq=seq):
+                    q = attention.q_proj(hidden)
+                    k = attention.k_proj(hidden)
+                    v = attention.v_proj(hidden)
+                    q = q.new_zeros(batch * seq, q.shape[-1]).index_copy(0, packed_idx, q)
+                    k = k.new_zeros(batch * seq, k.shape[-1]).index_copy(0, packed_idx, k)
+                    v = v.new_zeros(batch * seq, v.shape[-1]).index_copy(0, packed_idx, v)
+                    q = q.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    k = k.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    v = v.view(batch, seq, -1, attention.head_dim).transpose(1, 2)
+                    q, k = modeling_qwen2.apply_rotary_pos_emb(q, k, cos, sin)
+
+                    def run_attention(q, k, v, mask):
+                        output, _ = attention_interface(
+                            attention,
+                            q,
+                            k,
+                            v,
+                            mask,
+                            dropout=0.0 if not attention.training else attention.attention_dropout,
+                            scaling=attention.scaling,
+                            sliding_window=attention.sliding_window,
+                        )
+                        return output
+
+                    if checkpoint_sdpa:
+                        attn_out = _call_with_checkpoint(
+                            run_attention, q, k, v, mask, enabled=True)
+                    else:
+                        attn_out = run_attention(q, k, v, mask)
+                    attn_out = attn_out.reshape(batch * seq, -1).index_select(0, packed_idx)
+                    return attention.o_proj(attn_out)
+
+                attention_mask_for_layer = causal_mask_mapping[self.config.layer_types[index]]
+                if attention_checkpoint == "1":
+                    attn_out = _call_with_checkpoint(
+                        attention_output, layer_input, cos, sin, attention_mask_for_layer, False,
+                        enabled=True)
+                else:
+                    attn_out = attention_output(
+                        layer_input, cos, sin, attention_mask_for_layer,
+                        attention_checkpoint == "2")
 
                 mlp_input, residual = _fuse_add_norm(
                     residual, attn_out, layer.post_attention_layernorm)
                 mlp_out = layer.mlp(mlp_input)
                 next_norm = (self.layers[index + 1].input_layernorm
                              if index + 1 < self.config.num_hidden_layers else self.norm)
-                layer_input, residual = _fuse_add_norm(residual, mlp_out, next_norm)
+                layer_input, residual = _fuse_add_norm(
+                    residual, mlp_out, next_norm, exact_residual)
 
             output = layer_input.new_zeros(batch * seq, width).index_copy(0, packed_idx, layer_input)
             return modeling_qwen2.BaseModelOutputWithPast(
@@ -147,6 +183,7 @@ def patch_qwen2_layer_tail():
 
         residual = inputs_embeds
         layer_input = self.layers[0].input_layernorm(residual)
+        exact_residual = os.environ.get("SOUP_X_EXACT_RESID") == "1"
 
         for index, layer in enumerate(self.layers[: self.config.num_hidden_layers]):
             attn_out, _ = layer.self_attn(
@@ -161,7 +198,8 @@ def patch_qwen2_layer_tail():
             mlp_out = layer.mlp(mlp_input)
             next_norm = (self.layers[index + 1].input_layernorm
                          if index + 1 < self.config.num_hidden_layers else self.norm)
-            layer_input, residual = _fuse_add_norm(residual, mlp_out, next_norm)
+            layer_input, residual = _fuse_add_norm(
+                residual, mlp_out, next_norm, exact_residual)
 
         return modeling_qwen2.BaseModelOutputWithPast(last_hidden_state=layer_input, past_key_values=None)
 
