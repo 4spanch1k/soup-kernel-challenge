@@ -14,6 +14,7 @@ fake module in Soup's tests) takes the original code path untouched.
 """
 
 from dataclasses import dataclass
+import os
 from typing import Any
 
 import torch
@@ -118,6 +119,9 @@ def _step_from_logits(logits, labels):
 
 def _log_metrics(trainer, inputs, step):
     """TRL's `compute_loss` bookkeeping for the three logged columns, from the kernel's numbers."""
+    if (os.environ.get("SOUP_X_METRICS_BATCHED") == "1"
+            and getattr(trainer.accelerator, "num_processes", None) == 1):
+        return _log_metrics_batched(trainer, inputs, step)
     metrics = trainer._metrics["train"]
     attention_mask = inputs["attention_mask"]
     gather = trainer.accelerator.gather_for_metrics
@@ -130,6 +134,36 @@ def _log_metrics(trainer, inputs, step):
         total_sum = total.sum()
         metrics["mean_token_accuracy"].append(
             (correct.sum() / total_sum).item() if total_sum > 0 else 0.0)
+
+
+def _log_metrics_batched(trainer, inputs, step):
+    """Keep the same reductions and gather calls, then read three scalars together.
+
+    Float64 is only the transport format: it retains the already-computed fp32
+    metric values and the integer batch token count exactly. No model arithmetic
+    or logged metric reduction changes, and no host branch reads a CUDA scalar.
+    """
+    metrics = trainer._metrics["train"]
+    attention_mask = inputs["attention_mask"]
+    gather = trainer.accelerator.gather_for_metrics
+    with torch.no_grad():
+        entropy = (step.token_entropy * attention_mask).sum() / attention_mask.sum().clamp(min=1)
+        entropy = gather(entropy).mean()
+        tokens = gather(attention_mask.sum()).sum()
+        correct, total = gather(step.correct), gather(step.labelled)
+        total_sum = total.sum()
+        accuracy = torch.where(total_sum > 0, correct.sum() / total_sum.clamp_min(1), 0.0)
+        values = torch.stack((entropy.double(), tokens.double(), accuracy.double())).cpu().tolist()
+    metrics["entropy"].append(values[0])
+    # Soup's attention mask is integral, so the transport preserves the Python
+    # integer used by its running token counter, including counts above 2**24.
+    if not (attention_mask.is_floating_point() or attention_mask.is_complex()):
+        token_count = int(values[1])
+    else:
+        token_count = values[1]
+    trainer._total_train_tokens += token_count
+    metrics["num_tokens"] = [trainer._total_train_tokens]
+    metrics["mean_token_accuracy"].append(values[2])
 
 
 def _eligible(trainer, model, inputs):
