@@ -37,3 +37,6 @@ def apply():
     from .sft_fingerprint import patch_sft_dataset_map
     patch_lora_linear4bit()
     patch_sft_dataset_map()
+
+    from .activation_codec import patch_saved_activation_int8
+    patch_saved_activation_int8()
