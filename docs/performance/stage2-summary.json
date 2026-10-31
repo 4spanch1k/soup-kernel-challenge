@@ -1,0 +1,117 @@
+[
+  {
+    "name": "control1",
+    "flags": {},
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 71.79,
+    "gpu_peak_mib": 5441,
+    "train_loop_s": 40.89,
+    "eval_loss": 2.04951
+  },
+  {
+    "name": "startup",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_MERGE_VARIANTS": "1",
+      "SOUP_X_FPRINT": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 66.51,
+    "gpu_peak_mib": 5441,
+    "train_loop_s": 44.37,
+    "eval_loss": 2.0495
+  },
+  {
+    "name": "parallel",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_PARALLEL_CE": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 69.58,
+    "gpu_peak_mib": 5441,
+    "train_loop_s": 45.55,
+    "eval_loss": 2.04954
+  },
+  {
+    "name": "parallel512",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_PARALLEL_CE": "1",
+      "SOUP_X_HEAD_CHUNK": "512"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 69.38,
+    "gpu_peak_mib": 5461,
+    "train_loop_s": 45.38,
+    "eval_loss": 2.04949
+  },
+  {
+    "name": "int8",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_PARALLEL_CE": "1",
+      "SOUP_X_ACT_INT8": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 69.93,
+    "gpu_peak_mib": 4503,
+    "train_loop_s": 45.95,
+    "eval_loss": 2.04951
+  },
+  {
+    "name": "int8_attention",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_PARALLEL_CE": "1",
+      "SOUP_X_ACT_INT8": "1",
+      "SOUP_X_ATTN_CKPT": "1",
+      "SOUP_X_DENSE_CKPT": "1",
+      "SOUP_X_EXACT_RESID": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 70.22,
+    "gpu_peak_mib": 4503,
+    "train_loop_s": 46.15,
+    "eval_loss": 2.04954
+  },
+  {
+    "name": "varlen_int8",
+    "flags": {
+      "SOUP_X_RELEASE_EMBED": "1",
+      "SOUP_X_PARALLEL_CE": "1",
+      "SOUP_X_ACT_INT8": "1",
+      "SOUP_X_VARLEN": "1"
+    },
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 69.98,
+    "gpu_peak_mib": 4503,
+    "train_loop_s": 46.03,
+    "eval_loss": 2.04953
+  },
+  {
+    "name": "control2",
+    "flags": {},
+    "status": 0,
+    "ok": true,
+    "runs": 1,
+    "wall_s": 68.88,
+    "gpu_peak_mib": 5441,
+    "train_loop_s": 45.07,
+    "eval_loss": 2.04955
+  }
+]
