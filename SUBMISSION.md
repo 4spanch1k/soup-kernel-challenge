@@ -63,8 +63,9 @@ against the values in `checks.json` after download.
 ### Earlier Colab T4 measurements
 
 One base run and one solution run, measured by `harness/run_task.py` and checked by
-`harness/check_rules.py` on a Google Colab Tesla T4, branch `m/embed16`, commit `4749158`.
-These are Colab results, not Kaggle results.
+`harness/check_rules.py` on a Google Colab Tesla T4, branch `m/embed16`, commit `4749158`
+(`solution/` is identical to the Kaggle-measured commit). These are Colab results, not Kaggle
+results; a two-run repeat with another seed follows below.
 
 | Metric | Base Soup | Ours | Ratio / change |
 |---|---:|---:|---:|
@@ -77,21 +78,28 @@ These are Colab results, not Kaggle results.
 
 Check 4: 9.6% of training time. Check 6's loss-curve gap was 0.03% on the first step and 0.04% on
 average. Check 8 measured time and memory at 0.831x and 0.379x of base. Soup's 79 regression
-tests passed with `apply()` active; all 49 solution tests passed on the T4. Across development
-runs the speedup against the same-session base was 1.07x-1.24x.
+tests passed with `apply()` active; all 49 solution tests passed on the T4.
 
-Repeat check, another seed and two runs per side (jury-like): all 10 checks pass; 80.8 s -> 66.2 s (1.221x), 14,339 -> 5,419 MiB (2.646x), eval loss +0.016%, kernels 8.8%.
+Colab repeat check, another seed (2026) and two runs per side (jury-like): all 10 checks pass; 80.8 s -> 66.2 s (1.221x), 14,339 -> 5,419 MiB (2.646x), eval loss +0.016%, kernels 8.8%.
 
 ## Presentation covers
 
 Describe the optimized operations and kernel ideas, base-versus-solution time and memory, eval
-loss, the limits of one Kaggle pair on public data, and next steps. Video and presentation
-remain deferred by the team and must be linked before final submission.
+loss, the limits of one Kaggle pair on public data, rejected experiments, and next steps. The
+video and presentation drafts are `docs/DEMO_VIDEO_SCRIPT.md` and `docs/PRESENTATION_OUTLINE.md`;
+both must be recorded and linked above before final submission.
 
 ## Limitations
 
-Kaggle has one measured run per side. The jury's hidden rows and two runs per side may change
-the results. Check 4 passed by 5.8 percentage points in the Kaggle run. MLP recomputation remains
-off: an earlier Colab experiment cost 16% time for 27% less memory. RMSNorm outputs fp16 under
+Kaggle has one measured run per side on public data; the earlier Colab measurements (one run per
+side, and a two-run repeat with another seed) are reported separately above. The jury's hidden
+rows and two runs per side may change the results. Check 4 (at least 5% of training time) measured
+10.8% on Kaggle, which is 5.8 percentage points above the requirement; it was 9.6% in the earlier
+Colab run and 8.8% in the lowest run of the Colab repeat. MLP recomputation remains off: a Colab
+measurement showed 16% more time for 27% less memory. Other ideas we measured and rejected
+(per-sample causal attention, a fused NF4 GEMM, a fused LoRA path, start-up and model-loading
+changes) are tabulated in `README.md` under "Tried and rejected". RMSNorm outputs fp16 under
 autocast, with consumer gradients summed in fp16; Soup's GradScaler is enabled and the measured
-mean loss-curve gap was 0.04%. The kernels use Triton 3.x features and PyTorch 2.4 or newer APIs.
+mean loss-curve gap was 0.04%. Tested environment (Kaggle): Python 3.13.15, torch 2.11.0+cu128,
+Triton 3.6.0; the kernels use Triton 3.x features and were not run on other torch or Triton
+versions.

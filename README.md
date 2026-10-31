@@ -5,6 +5,10 @@ We optimized the fixed `soup train` run with our own Triton kernels. The run rem
 Tesla T4. The fixed task uses batch 4, up to 512 tokens and 64 steps. We did not change the model,
 data, batches, training steps, optimizer, schedule, LoRA settings, or Soup switches.
 
+**Result in one line (Kaggle T4, saved version 1):** 87.77 s → 62.10 s (1.413x faster), 14,345 → 5,441 MiB
+(2.636x less memory), eval loss 2.04964 → 2.04952 (-0.006%), all 10 harness checks passed, own kernels
+10.8% of training time.
+
 **Team repository:** [BAITC-Hacks/hack-b6e5a4cf-mononyx](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx).
 
 **Submission code snapshot:** [a412248](https://github.com/BAITC-Hacks/hack-b6e5a4cf-mononyx/commit/a412248dcf19b1bbfd13ebf7f93112eb0322abe2).
@@ -83,8 +87,10 @@ These are a single measured pair, not the jury's hidden-data result.
 ### Earlier Colab Tesla T4 measurements
 
 These are one base run and one solution run from `harness/run_task.py`, followed by
-`harness/check_rules.py`, on a Google Colab Tesla T4. The measured solution was branch
-`m/embed16`, commit `4749158` (`solution/` of this repository is that code).
+`harness/check_rules.py`, on a Google Colab Tesla T4; a two-run repeat with another seed is
+reported further below. The measured solution was branch `m/embed16`, commit `4749158`; the
+`solution/` directory is byte-identical in that commit, in `29184d9` and in the Kaggle-measured
+`b587c5c`.
 
 | Metric | Base Soup | Ours | Result |
 |---|---:|---:|---:|
@@ -98,7 +104,9 @@ and memory were 0.831x and 0.379x of base (check 8). Soup's 79 regression tests 
 `apply()` active (check 10), and all 49 solution tests passed on the T4.
 
 How we got there on the same machine (one run each; Colab speed drifts between sessions, base time
-was 75.9 s to 80.9 s, so compare rows by their speedup against the base of the same run):
+was 75.9 s to 80.9 s, so compare rows by their speedup against the base of the same run; the
+speedup against the same-session base grew from about 1.07x in the first row to 1.24x in the
+packed-layers row):
 
 | Step | Time, s (base) | Peak, MiB | Check 4 |
 |---|---:|---:|---|
@@ -120,7 +128,7 @@ MLP recomputation (`solution/recompute.py`, our own `torch.utils.checkpoint`, no
 measured on the T4 in one session, solution only: off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB. It
 costs 16% time for 27% memory, so it stays off.
 
-### Repeat with another seed, two runs per side (the way the jury runs it)
+### Earlier Colab repeat with another seed, two runs per side (the way the jury runs it)
 
 `python harness/run_task.py --repeats 2 --seed 2026`, then `check_rules.py`, on the same code (commit
 `29184d9`), Google Colab Tesla T4. **All 10 checks passed**: base 80.8 s / 14,339 MiB, ours 66.2 s /
@@ -131,15 +139,34 @@ performance on the jury's hidden rows.
 
 ## Limits
 
-- Kaggle results are one measured run per side on public data. Earlier Colab measurements,
-  including a two-repeat check with another seed, are reported separately above.
-- The jury uses hidden rows and two runs per side, so results can move. Check 4 had 5.8
-  percentage points of margin in this Kaggle run (10.8% against the 5% requirement).
-- `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16% time for 27% memory in our measurement.
+- Kaggle gives one measured run per side on public data. The earlier Colab measurements are
+  reported separately above: one run per side, plus a two-run repeat with another seed. None of
+  them is the jury's hidden-data result.
+- The jury uses hidden rows and two runs per side, so results can move. Check 4 (own kernels at
+  least 5% of training time) measured 10.8% on Kaggle, 9.6% in the earlier Colab run and 8.8% in
+  the lowest run of the Colab seed repeat; on Kaggle that is 5.8 percentage points above the
+  requirement.
+- `solution/recompute.py` can recompute MLP activations; it is off by default because it cost 16%
+  time for 27% memory in our measurement.
 - RMSNorm writes fp16 under autocast. Gradients from its several consumers are summed in fp16;
   Soup's GradScaler is enabled, and the observed mean loss-curve gap was 0.04%.
-- The kernels use Triton 3.x features including `tl.interleave` and `tl.argmax` in loops, and
-  PyTorch APIs available in torch 2.4 or newer.
+- Tested environment (Kaggle, from `docs/kaggle/README.md`): Python 3.13.15, torch 2.11.0+cu128,
+  Triton 3.6.0, Tesla T4. The kernels use Triton 3.x features including `tl.interleave` and
+  `tl.argmax` in loops; we have not run them on other torch or Triton versions.
+
+## Tried and rejected
+
+Measured on a Colab T4 with the full harness, each against its own base from the same session
+(details in `docs/CODEX_VS_CLAUDE.md` and `docs/HANDOFF.md`). None of these is in `solution/`.
+
+| Idea | Measured result | Decision |
+|---|---|---|
+| MLP recomputation (`solution/recompute.py`) | off 59.7 s / 6,321 MiB, on 69.3 s / 4,601 MiB: 16% time for 27% memory | stays off |
+| Per-sample causal attention on packed rows (`q/varlen-attn`) | 66.9 / 68.3 s against 61.8 / 68.0 s for `main` (two alternating runs each); peak memory the same, 5,441 MiB | no gain, not merged |
+| NF4 GEMM as one Triton kernel (`c2/fused4bit`) | 10-200 times slower than dequantization plus cuBLAS | rejected |
+| Fused LoRA path (`l/lora-fuse`) | patch never fired (PEFT uses its own 4-bit LoRA class); 63.2 s / 5,441 MiB, same as `main`; micro-benchmark 1.26 ms against 0.94 ms per q call | rejected |
+| Shorter start-up (`s/startup`) | cold Triton compile of all our kernels is 4.7 s; a warm-up thread could hide it but risks reading as background work | not used |
+| Faster model loading (`w/load-phase`) | no value-preserving saving above 0.5 s | not used |
 
 ## How to run
 

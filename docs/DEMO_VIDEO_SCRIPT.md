@@ -1,34 +1,39 @@
-# Demo video script
+# Сценарий демо-видео (на русском)
 
-**Target runtime: 2:45. Hard limit: 3:00.** Use the existing Colab Tesla T4 results. Label them as Colab results; do not present them as a Kaggle run. The full-measurement command is shown as a reproducibility command, while the displayed result is the recorded run described in `README.md`.
+**Лимит: 3:00. Целевая длительность: 2:50.** Текст диктора ниже занимает около 400 слов
+(примерно 140 слов в минуту). Основные цифры берём из прогона на **Kaggle Tesla T4**
+(сохранённая версия 1, 30 октября 2026); результаты Colab называем «более ранними замерами».
+Все числа взяты из `README.md` и `docs/kaggle/checks.json`; новых и пересчитанных значений
+на экране быть не должно.
 
-| Time | Speaker | On screen | Exact narration |
-|---|---|---|---|
-| 0:00–0:18 | Speaker 1 | Colab notebook title, then a cropped `nvidia-smi` result showing the GPU name, Tesla T4. | “This is our Soup Kernel Challenge solution. We kept the fixed Soup training task and replaced selected operations with our own Triton kernels. The results I’ll show are from Google Colab on a Tesla T4.” |
-| 0:18–0:42 | Speaker 2 | A simple profile bar chart described in words: a highlighted bar for casts and adds labeled “about 17%”; beside it, a large, unscaled block labeled “full vocabulary logits and extra passes.” Add “shape-recording profile” as the chart caption. | “The profile showed two costs. The residual stream stays in fp32, so fp16 linear outputs are cast back and casts plus adds used about 17% of GPU time. The output head also materialized huge vocabulary logits, followed by separate loss and metric work.” |
-| 0:42–1:19 | Speaker 3 | Kernel map beside short code clips from `ce_loss.py`, `rmsnorm.py`, `rope.py`, `nf4_dequant.py`, and `add_rmsnorm.py`. | “The output head handles 256 token rows at a time and computes loss, entropy, argmax and gradients without materializing all logits. RMSNorm uses fp32 statistics, saves one reciprocal standard deviation per row, and writes the normalized output in the autocast dtype. RoPE rotates both halves of a head in one forward kernel and applies the inverse rotation in backward. NF4 dequantization decodes packed nibbles and nested scales into the compute dtype. Add-RMSNorm fuses the post-attention residual addition and normalization while preserving the fp32 residual and combining the backward paths.” |
-| 1:19–1:34 | Speaker 4 | Terminal command card, then recorded T4 test output. | “The solution test command is `python -m pytest solution -q`. On the T4, all 37 solution tests passed. The full measurement entry point is `bash scripts/kaggle_3_full.sh`; it runs the base and solution measurement, checks, and score.” |
-| 1:34–1:59 | Speaker 1 | README results table, enlarged and held long enough to read. | “In this measured pair, whole training took 77.5 seconds for base and 65.8 seconds for ours: a 1.176x speedup. Peak GPU memory went from 14,345 to 6,321 MiB, 2.269x lower. Eval loss was 2.04966 versus 2.04948, a change of minus 0.009 percent.” |
-| 1:59–2:14 | Speaker 2 | Recorded `harness/check_rules.py` check table or summary, labeled “Colab run.” Highlight checks 4, 6, 8, and 10; keep all ten statuses visible. | “All ten harness checks passed. Our kernels used 6.4% of training time in check 4. Check 6’s mean loss-curve gap was 0.04%. Check 8 measured time and memory at 0.850x and 0.441x of base. Soup’s 79 regression tests also passed with our patch active.” |
-| 2:14–2:34 | Speaker 3 | README Limits section, with “Colab, not Kaggle” and “one run per side” visible. | “These are Colab results, not Kaggle results: our Kaggle account lacks phone verification for GPU and Internet access. We measured one run per side, so hidden rows and the jury’s two runs per side may move the result. Check 4 passed with about 1.4 percentage points of margin. MLP recomputation is off and unmeasured.” |
-| 2:34–2:45 | Speaker 4 | Closing card: “Next: Kaggle T4 run, repeat measurements, measure recomputation separately.” | “Next, complete the Kaggle run when access is available, repeat the measurements, and evaluate recomputation separately. Until then, these remain Colab results.” |
+| Время | Что показать на экране | Текст диктора |
+|---|---|---|
+| 0:00–0:20 | Титульный кадр «mononyx — Soup Kernel Challenge», затем обрезанный вывод `nvidia-smi` с названием Tesla T4. | «Мы команда mononyx, нас двое. В задаче Soup Kernel Challenge нужно ускорить фиксированное обучение Qwen2.5-1.5B на Tesla T4: LoRA ранга 16, батч 4, до 512 токенов, 64 шага. Делать это можно только своими ядрами Triton. Модель, данные, порядок батчей и настройки мы не меняли.» |
+| 0:20–0:45 | Столбчатая диаграмма профиля: выделенный столбец «приведения типов и сложения — около 17%» и рядом крупный блок «логиты по всему словарю». Подпись: «профиль с записью форм». | «Сначала мы сняли профиль с записью форм тензоров и нашли две проблемы. Первая: поток остатка остаётся в fp32, а слой Linear4bit возвращает результат в типе входа. Из-за этого приведения типов и сложения занимали около 17% времени GPU. Вторая: выходная голова создаёт огромный тензор логитов по всему словарю и отдельные проходы для потерь и метрик.» |
+| 0:45–1:25 | Карта ядер рядом с короткими фрагментами кода: `ce_loss.py`, `rmsnorm.py`, `rope.py`, `nf4_dequant.py`, `add_rmsnorm.py`. В углу кадра: «Milakov, Gimelshein 2018; Liger-Kernel; Cut Cross-Entropy; QLoRA и bitsandbytes». | «Мы написали ядра на Triton. Голова обрабатывает по 256 строк токенов за раз и считает потери, энтропию и градиенты без полных логитов. RMSNorm пишет результат сразу в типе autocast. RoPE вращает обе половины головы одним ядром. Слитое сложение с RMSNorm объединяет остаточную связь и нормализацию. Собственная деквантизация NF4 заменяет код bitsandbytes и в прямом, и в обратном проходе. Идеи мы взяли из онлайн-softmax Милакова и Гимельшейна, а также из Liger-Kernel и Cut Cross-Entropy, но ни одну из этих библиотек не подключаем. Весь код написан нами.» |
+| 1:25–1:45 | Терминал с командой `python -m pytest solution -q`, затем записанный вывод Kaggle: «49 passed» и «79 passed». | «Корректность мы проверяем тестами. Для каждого ядра есть тест против обычного PyTorch. На Kaggle T4 прошли все 49 тестов решения и все 79 регрессионных тестов Soup с включёнными патчами. Полный замер базы и решения запускается одной командой, и та же команда проверяет правила и считает итоговую оценку.» |
+| 1:45–2:15 | Таблица результатов из `README.md` (раздел Kaggle), крупно, пауза для чтения. Подпись: «Kaggle T4, версия 1». | «Теперь результат на Kaggle T4, сохранённая версия 1 публичного ноутбука: одна база и одно решение в одной сессии. Весь запуск обучения: 87,77 секунды у базового Soup и 62,10 секунды у нас, ускорение в 1,413 раза. Пиковая память GPU: 14 345 мегабайт у базы против 5 441 у нас, в 2,636 раза меньше. Качество не пострадало: eval loss 2,04964 у базы и 2,04952 у нас, то есть минус 0,006 процента.» |
+| 2:15–2:35 | Записанная таблица `check_rules.py`: все 10 статусов видны, подсвечены проверки 4, 6 и 8. | «Все 10 проверок харнесса прошли. Наши ядра занимают 10,8% времени обучения при требуемых 5%. Расхождение кривой потерь с базой: 0,03% на первом шаге и 0,04% в среднем. Проверка 5 подтвердила те же шаги и метрики Soup, проверка 9 — чистое измерение. По времени мы составляем 0,708 от базы, по памяти 0,379.» |
+| 2:35–2:50 | Раздел «Limits» из `README.md`, затем таблица «Earlier Colab measurements». Подпись: «более ранние замеры, Colab». | «Честно об ограничениях: это одна пара прогонов на открытых данных, а у жюри скрытые строки и по два прогона. Более ранний замер на Colab: 76,4 секунды против 63,5, ускорение в 1,203 раза. Пересчёт MLP мы выключили: он стоит 16% времени ради 27% памяти. Спасибо!» |
 
-## Commands and output to capture
+## Команды, которые показываем
 
-Show these commands in the terminal or notebook. Capture the results from the prepared GPU run; do not imply the local Mac ran CUDA tests or that the recorded numbers came from Kaggle.
+Показывайте записанный вывод, а не новый запуск: локальный Mac CUDA-тесты не запускает.
 
 ```bash
 python -m pytest solution -q
 bash scripts/kaggle_3_full.sh
 ```
 
-Show the recorded solution-test result (37 passed on the T4), then the full measurement summary and check table. The table should show all ten checks passing. Keep the recorded run labeled **Google Colab Tesla T4**. The final measured values are in the README results table; show no invented or rerun values.
+Итоговые значения берём только из таблицы результатов `README.md` и из
+`docs/kaggle/checks.json`. Результаты Colab подписываем «более ранние замеры, Colab».
 
-## Recording checklist
+## Чек-лист записи
 
-- [ ] Resolution: TODO — choose and confirm a readable recording resolution.
-- [ ] Font size: TODO — choose and check readability at final playback; the exact size is not specified in the README.
-- [ ] Hide tokens, API keys, notebook secrets, and personal account details.
-- [ ] Show the GPU name, Tesla T4; crop other changing `nvidia-smi` values if they are not part of the story.
-- [ ] Label the results as Colab, not Kaggle.
-- [ ] Keep the recorded narration and screen capture within 2:45 target and 3:00 maximum.
+- [ ] Выбрать и проверить читаемое разрешение записи (конкретное значение в репозитории не задано).
+- [ ] Выбрать размер шрифта и проверить читаемость при финальном воспроизведении (значение не задано).
+- [ ] Скрыть токены, ключи API, секреты ноутбука и личные данные аккаунтов.
+- [ ] Показать название GPU (Tesla T4); остальные меняющиеся значения `nvidia-smi` обрезать.
+- [ ] Подписать результаты Kaggle как «Kaggle T4», а результаты Colab как «более ранние замеры».
+- [ ] Уложиться в целевые 2:50 и жёсткий лимит 3:00 (озвучка плюс экран); засечь время по готовой записи.
+- [ ] Загрузить видео с публичной ссылкой и вписать её в `SUBMISSION.md` вместо `TODO`.
