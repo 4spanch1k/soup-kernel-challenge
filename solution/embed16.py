@@ -1,5 +1,6 @@
 """Keep an exactly representable tied Qwen2 embedding and head in fp16."""
 
+import os
 from types import MethodType
 
 import torch
@@ -65,4 +66,8 @@ def compact_tied_embedding(model_core):
     lm_head.weight = compact_weight
     embedding.forward = MethodType(_embedding_forward, embedding)
     del embedding_weight, head_weight
+    if os.environ.get("SOUP_X_RELEASE_EMBED") == "1":
+        # The frozen fp32 table was just replaced. Return its unused cached GPU
+        # storage once, rather than retain it for the whole training command.
+        torch.cuda.empty_cache()
     return True

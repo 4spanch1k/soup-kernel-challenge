@@ -3,10 +3,10 @@ import json, os, subprocess, sys
 from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 os.chdir(ROOT)
-FLAGS=['SOUP_X_VARLEN','SOUP_X_PARALLEL_CE','SOUP_X_ACT_INT8','SOUP_X_HEAD_CHUNK','SOUP_X_ATTN_CKPT',
+FLAGS=['SOUP_X_RELEASE_EMBED','SOUP_X_VARLEN','SOUP_X_PARALLEL_CE','SOUP_X_ACT_INT8','SOUP_X_HEAD_CHUNK','SOUP_X_ATTN_CKPT',
        'SOUP_X_DENSE_CKPT','SOUP_X_EXACT_RESID','SOUP_X_MERGE_VARIANTS','SOUP_X_LORA',
        'SOUP_X_FPRINT','SOUP_RECOMPUTE_MLP']
-FAST=dict(SOUP_X_MERGE_VARIANTS='1',SOUP_X_LORA='1',SOUP_X_FPRINT='1')
+FAST=dict(SOUP_X_MERGE_VARIANTS='1',SOUP_X_FPRINT='1',SOUP_X_RELEASE_EMBED='1')
 CASES=[('control1',{}),('parallel',dict(FAST,SOUP_X_PARALLEL_CE='1')),
        ('parallel512',dict(FAST,SOUP_X_PARALLEL_CE='1',SOUP_X_HEAD_CHUNK='512')),
        ('int8',dict(FAST,SOUP_X_PARALLEL_CE='1',SOUP_X_ACT_INT8='1')),
@@ -27,5 +27,8 @@ for name,flags in CASES:
   row=dict(name=name,flags=flags,status=status,**result.get('summary',{}).get('solution',{}))
   rows.append(row)
   print('STAGE2_RESULT',json.dumps(row),flush=True)
+  if not row.get('ok'):
+   for log in out.glob('solution_*/train.log'):
+    print(log.read_text()[-12000:],flush=True)
   (ROOT/'runs_stage2/summary.json').write_text(json.dumps(rows,indent=2))
 print('STAGE2_COMPLETE',flush=True)
