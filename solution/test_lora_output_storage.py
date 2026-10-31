@@ -72,7 +72,8 @@ def test_real_peft_lora_no_clone_matches_original(monkeypatch, dtype, shape, wit
     base.requires_grad_(False)
     config = LoraConfig(r=16, lora_alpha=8, lora_dropout=0.05,
                         init_lora_weights=True, use_dora=False, bias="none")
-    layer = Linear4bit(base, "default", config=config).cuda().train()
+    layer = Linear4bit(base, "default", config=config, r=config.r,
+                       lora_alpha=config.lora_alpha).cuda().train()
     # PEFT initializes B to zero; nonzero weights exercise both adapter gradients.
     with torch.no_grad():
         layer.lora_A["default"].weight.normal_(std=0.02)
