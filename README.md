@@ -76,8 +76,9 @@ One base and one solution run in the same session with the unchanged harness:
 | Peak GPU memory, MiB | 14,345 | 4,591 | 3.125x lower |
 | Eval loss | 2.04966 | 2.04987 | +0.010% vs base |
 
-All 10 harness checks passed; own kernels accounted for 13.1% of training time. This is a single
-paired run on Colab, not repeated; the saved Kaggle notebook was not re-run on this commit.
+All 10 harness checks passed; own kernels accounted for 13.1% of training time. A second, independent paired run of the same commit on a Kaggle Tesla T4 (interactive notebook session, not a saved
+version) gave base 98.1 s, ours 58.5 s (1.677x), 14,345 → 4,591 MiB (3.125x less), eval loss 2.04965 → 2.04983 (+0.009%),
+all 10 checks passed. Each run is a single pair; the saved public Kaggle notebook was not re-run on this commit.
 
 ### Kaggle Tesla T4, 30 October 2026 (code before the final fix)
 
