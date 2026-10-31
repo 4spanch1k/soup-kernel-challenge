@@ -10,9 +10,13 @@ attention then casts back to fp16; with autocast on this kernel writes the input
 which is the same value rounded at the same place and half the memory.
 """
 
+import os
+
 import torch
 import triton
 import triton.language as tl
+
+_rope_kernel_no_seq = None
 
 
 @triton.jit
@@ -45,7 +49,10 @@ def rope_kernel(x_ptr, cos_ptr, sin_ptr, out_ptr, seq, sxb, sxh, sxt, sob, soh, 
 def _launch(x, cos, sin, out_dtype, backward):
     batch, heads, seq, dim = x.shape
     out = torch.empty_like(x, dtype=out_dtype)
-    rope_kernel[(batch * seq, heads)](
+    kernel = (_rope_kernel_no_seq if os.environ.get("SOUP_X_MERGE_VARIANTS") == "1"
+              and _rope_kernel_no_seq is not None else rope_kernel)
+    grid = (batch * seq, heads)
+    kernel[grid](
         x, cos, sin, out, seq, x.stride(0), x.stride(1), x.stride(2), out.stride(0),
         out.stride(1), out.stride(2), cos.stride(0) if cos.shape[0] > 1 else 0, cos.stride(1),
         HALF=dim // 2,
@@ -86,6 +93,12 @@ def _autocast_on():
 
 def patch_qwen2_rope():
     """Replace the module-level `apply_rotary_pos_emb` that Qwen2Attention.forward looks up."""
+    global _rope_kernel_no_seq
+    if (os.environ.get("SOUP_X_MERGE_VARIANTS") == "1"
+            and _rope_kernel_no_seq is None):
+        # Reuse the kernel source while treating variable sequence length as runtime data.
+        _rope_kernel_no_seq = triton.jit(rope_kernel.fn, do_not_specialize=["seq"])
+
     from transformers.models.qwen2 import modeling_qwen2
 
     original = modeling_qwen2.apply_rotary_pos_emb

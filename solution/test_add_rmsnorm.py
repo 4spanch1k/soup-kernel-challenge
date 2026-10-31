@@ -15,8 +15,14 @@ def reference(residual, delta, weight, eps, y_dtype):
 
 @pytest.mark.parametrize("y_dtype", [torch.float16, torch.float32])
 @pytest.mark.parametrize("shape", [(4, 512, 1536), (3, 77, 1001)])
-def test_matches_pytorch(y_dtype, shape):
+@pytest.mark.parametrize("merge_variants", [False, True])
+def test_matches_pytorch(y_dtype, shape, merge_variants, monkeypatch):
     from solution.add_rmsnorm import add_rmsnorm
+
+    if merge_variants:
+        monkeypatch.setenv("SOUP_X_MERGE_VARIANTS", "1")
+    else:
+        monkeypatch.delenv("SOUP_X_MERGE_VARIANTS", raising=False)
 
     torch.manual_seed(0)
     residual = (torch.randn(shape, device="cuda") * 2).requires_grad_(True)  # fp32 stream
@@ -39,6 +45,27 @@ def test_matches_pytorch(y_dtype, shape):
     assert residual.grad.dtype == torch.float32 and delta.grad.dtype == torch.float16
     torch.testing.assert_close(residual.grad, r2.grad, rtol=5e-3, atol=5e-3)
     torch.testing.assert_close(delta.grad.float(), d2.grad.float(), rtol=5e-3, atol=5e-3)
+
+
+@pytest.mark.parametrize("y_dtype", [torch.float16, torch.float32])
+def test_merged_backward_without_dsum_matches_pytorch(y_dtype, monkeypatch):
+    from solution.add_rmsnorm import add_rmsnorm
+
+    monkeypatch.setenv("SOUP_X_MERGE_VARIANTS", "1")
+    torch.manual_seed(0)
+    residual = torch.randn(3, 7, 1001, device="cuda", requires_grad=True)
+    delta = torch.randn(3, 7, 1001, device="cuda", dtype=torch.float16, requires_grad=True)
+    weight = torch.rand(1001, device="cuda") + 0.5
+    ref_residual = residual.detach().clone().requires_grad_(True)
+    ref_delta = delta.detach().clone().requires_grad_(True)
+    ref, _ = reference(ref_residual, ref_delta, weight, 1e-6, y_dtype)
+    out, _ = add_rmsnorm(residual, delta, weight, 1e-6, y_dtype)
+
+    ref.float().sum().backward()
+    out.float().sum().backward()
+
+    torch.testing.assert_close(residual.grad, ref_residual.grad, rtol=5e-3, atol=5e-3)
+    torch.testing.assert_close(delta.grad.float(), ref_delta.grad.float(), rtol=5e-3, atol=5e-3)
 
 
 def test_decoder_layer_patch_matches_tiny_qwen2():

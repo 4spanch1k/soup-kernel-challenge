@@ -15,6 +15,8 @@ works on that value; autocast would round the fp32 norm output to fp16 for every
 same rounding happens once in the kernel.
 """
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -43,9 +45,10 @@ def add_rmsnorm_fwd_kernel(res_ptr, delta_ptr, w_ptr, sum_ptr, y_ptr, rstd_ptr, 
     tl.store(rstd_ptr + row, rstd)
 
 
-@triton.jit
+@triton.jit(do_not_specialize=["HAS_DSUM_RUNTIME"])
 def add_rmsnorm_bwd_kernel(dy_ptr, dsum_ptr, sum_ptr, w_ptr, rstd_ptr, dres_ptr, ddelta_ptr, width,
-                           BLOCK: tl.constexpr, HAS_DSUM: tl.constexpr):
+                           BLOCK: tl.constexpr, HAS_DSUM: tl.constexpr, HAS_DSUM_RUNTIME,
+                           MERGE_VARIANTS: tl.constexpr):
     row = tl.program_id(0).to(tl.int64)
     cols = tl.arange(0, BLOCK)
     inside = cols < width
@@ -57,7 +60,11 @@ def add_rmsnorm_bwd_kernel(dy_ptr, dsum_ptr, sum_ptr, w_ptr, rstd_ptr, dres_ptr,
     xhat = x * rstd
     wdy = dy * w
     grad = rstd * (wdy - xhat * (tl.sum(wdy * xhat, 0) / width))
-    if HAS_DSUM:  # the residual path of the sum
+    if MERGE_VARIANTS:
+        # This runtime flag keeps HAS_DSUM's true and false calls in one compiled variant.
+        if HAS_DSUM_RUNTIME:
+            grad += tl.load(dsum_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
+    elif HAS_DSUM:  # the residual path of the sum
         grad += tl.load(dsum_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
     tl.store(dres_ptr + offsets, grad.to(dres_ptr.dtype.element_ty), mask=inside)
     tl.store(ddelta_ptr + offsets, grad.to(ddelta_ptr.dtype.element_ty), mask=inside)
@@ -89,9 +96,14 @@ class AddRMSNormFunction(torch.autograd.Function):
         dsum2 = dsum.reshape(rows, width).contiguous() if has_dsum else dy2
         dres = torch.empty(rows, width, dtype=ctx.res_dtype, device=total.device)
         ddelta = torch.empty(rows, width, dtype=ctx.delta_dtype, device=total.device)
-        add_rmsnorm_bwd_kernel[(rows,)](dy2, dsum2, total, weight, rstd, dres, ddelta, width,
-                                        BLOCK=triton.next_power_of_2(width),
-                                        HAS_DSUM=has_dsum, num_warps=8)
+        merge_variants = os.environ.get("SOUP_X_MERGE_VARIANTS") == "1"
+        add_rmsnorm_bwd_kernel[(rows,)](
+            dy2, dsum2, total, weight, rstd, dres, ddelta, width,
+            BLOCK=triton.next_power_of_2(width),
+            HAS_DSUM=True if merge_variants else has_dsum,
+            HAS_DSUM_RUNTIME=has_dsum,
+            MERGE_VARIANTS=merge_variants,
+            num_warps=8)
         dweight = None
         if ctx.needs_input_grad[2]:  # the norms are frozen in this task; kept for correctness
             normed = (total.float() * rstd[:, None]).to(total.dtype)

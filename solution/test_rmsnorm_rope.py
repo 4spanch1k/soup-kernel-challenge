@@ -79,8 +79,15 @@ def reference_rope(q, k, cos, sin):
 
 @pytest.mark.parametrize("cos_batch", [3, 1])  # 1 is what Qwen2Model passes in training
 @pytest.mark.parametrize("q_dtype", [torch.float16, torch.float32])
-def test_rope_matches_pytorch(q_dtype, cos_batch):
-    from solution.rope import RotaryFunction
+@pytest.mark.parametrize("merge_variants", [False, True])
+def test_rope_matches_pytorch(q_dtype, cos_batch, merge_variants, monkeypatch):
+    from solution.rope import RotaryFunction, patch_qwen2_rope
+
+    if merge_variants:
+        monkeypatch.setenv("SOUP_X_MERGE_VARIANTS", "1")
+    else:
+        monkeypatch.delenv("SOUP_X_MERGE_VARIANTS", raising=False)
+    patch_qwen2_rope()
 
     torch.manual_seed(0)
     batch, seq, heads, kv_heads, dim = 3, 61, 12, 2, 128
