@@ -21,6 +21,8 @@ coalesced, each scale is read once per block, and the two nibbles are interleave
 consecutive output elements before one contiguous store.
 """
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -114,7 +116,14 @@ def patch_bnb_matmul_forward():
         if (quant_state is not None and out is None and A.is_cuda and A.numel() > 0
                 and A.dtype == quant_state.dtype and _supported(packed, quant_state, None, None)):
             ctx.is_empty = False
-            output = torch.nn.functional.linear(A, nf4_dequantize(packed, quant_state), bias)
+            weight = nf4_dequantize(packed, quant_state)
+            if (os.environ.get("SOUP_X_LINEAR_OUT") == "1"
+                    and A.dim() in (2, 3) and A.is_contiguous()
+                    and (bias is None or (bias.dim() == 1 and bias.shape[0] == weight.shape[0]
+                                          and bias.dtype == A.dtype and bias.device == A.device))):
+                output = _fresh_linear_output(A, weight, bias)
+            else:
+                output = torch.nn.functional.linear(A, weight, bias)
             ctx.state = quant_state
             ctx.dtype_A, ctx.dtype_B = A.dtype, packed.dtype
             ctx.dtype_bias = None if bias is None else bias.dtype
@@ -123,4 +132,24 @@ def patch_bnb_matmul_forward():
         return original(ctx, A, B, out, bias, quant_state)
 
     forward._soup_nf4_patched = True
+    forward._soup_nf4_original = original
     cls.forward = staticmethod(forward)
+
+
+def _fresh_linear_output(activation, weight, bias):
+    """Return an owning allocation, so PEFT may add its LoRA update in place.
+
+    F.linear on a 3-D activation can return a view. A view returned by a custom
+    autograd Function cannot then be modified in place. Only the views passed to
+    the out= GEMM below are temporary; the returned tensor owns its storage.
+    This helper runs inside MatMul4Bit.forward, where autograd is disabled.
+    """
+    output = torch.empty((*activation.shape[:-1], weight.shape[0]),
+                         dtype=activation.dtype, device=activation.device)
+    flat_input = activation.view(-1, activation.shape[-1])
+    flat_output = output.view(-1, weight.shape[0])
+    if bias is None:
+        torch.mm(flat_input, weight.t(), out=flat_output)
+    else:
+        torch.addmm(bias, flat_input, weight.t(), out=flat_output)
+    return output
