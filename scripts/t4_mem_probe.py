@@ -18,19 +18,19 @@ def install():
     import transformers
     from torch.nn.modules.module import register_module_forward_hook, register_module_forward_pre_hook
 
-    def pre(module, args, kwargs):
-        if type(module).__name__ == "Qwen2Model" and module.training and torch.is_grad_enabled():
-            ids, mask = kwargs.get("input_ids"), kwargs.get("attention_mask")
-            if ids is not None:
-                cur["B"], cur["T"] = int(ids.shape[0]), int(ids.shape[1])
-                cur["valid"] = int(mask.sum().item()) if mask is not None else int(ids.numel())
+    def pre(module, args):
+        # embed_tokens(input_ids) is called positionally with the batch ids: B x T of the padded batch
+        if (type(module).__name__ == "Embedding" and args and torch.is_tensor(args[0]) and args[0].dim() == 2
+                and torch.is_grad_enabled() and module.weight.shape[0] > 100000):
+            cur["B"], cur["T"] = int(args[0].shape[0]), int(args[0].shape[1])
+            cur["valid"] = int((args[0] != 151643).sum().item()) if args[0].dtype == torch.long else None
 
-    def post(module, args, kwargs, output):
+    def post(module, args, output):
         if type(module).__name__ == "Qwen2Model" and module.training and torch.is_grad_enabled():
             cur["after_model_fwd_mib"] = round(torch.cuda.memory_allocated() / MIB, 1)
 
-    register_module_forward_pre_hook(pre, with_kwargs=True)
-    register_module_forward_hook(post, with_kwargs=True)
+    register_module_forward_pre_hook(pre)
+    register_module_forward_hook(post)
 
     class Probe(transformers.TrainerCallback):
         def on_step_begin(self, train_args, state, control, **kw):
