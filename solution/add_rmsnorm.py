@@ -15,6 +15,8 @@ works on that value; autocast would round the fp32 norm output to fp16 for every
 same rounding happens once in the kernel.
 """
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -45,63 +47,103 @@ def add_rmsnorm_fwd_kernel(res_ptr, delta_ptr, w_ptr, sum_ptr, y_ptr, rstd_ptr, 
 
 @triton.jit
 def add_rmsnorm_bwd_kernel(dy_ptr, dsum_ptr, sum_ptr, w_ptr, rstd_ptr, dres_ptr, ddelta_ptr, width,
-                           BLOCK: tl.constexpr, HAS_DSUM: tl.constexpr):
+                           delta_ptr, dsum_stride, BLOCK: tl.constexpr, HAS_DSUM: tl.constexpr,
+                           EXACT_RESIDUAL: tl.constexpr, MERGE_DSUM: tl.constexpr):
     row = tl.program_id(0).to(tl.int64)
     cols = tl.arange(0, BLOCK)
     inside = cols < width
     offsets = row * width + cols
     dy = tl.load(dy_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
     x = tl.load(sum_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
+    if EXACT_RESIDUAL:
+        x += tl.load(delta_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
     w = tl.load(w_ptr + cols, mask=inside, other=0.0).to(tl.float32)
     rstd = tl.load(rstd_ptr + row)
     xhat = x * rstd
     wdy = dy * w
     grad = rstd * (wdy - xhat * (tl.sum(wdy * xhat, 0) / width))
     if HAS_DSUM:  # the residual path of the sum
-        grad += tl.load(dsum_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
+        if MERGE_DSUM:
+            dsum = tl.load(dsum_ptr + offsets * dsum_stride, mask=inside, other=0.0)
+            grad += tl.where(dsum_stride == 0, 0.0, dsum.to(tl.float32))
+        else:
+            grad += tl.load(dsum_ptr + offsets, mask=inside, other=0.0).to(tl.float32)
     tl.store(dres_ptr + offsets, grad.to(dres_ptr.dtype.element_ty), mask=inside)
     tl.store(ddelta_ptr + offsets, grad.to(ddelta_ptr.dtype.element_ty), mask=inside)
 
 
+if os.environ.get("SOUP_X_MERGE_VARIANTS") == "1":
+    add_rmsnorm_bwd_kernel = triton.jit(
+        do_not_specialize=["dsum_stride"])(add_rmsnorm_bwd_kernel.fn)
+
+
 class AddRMSNormFunction(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, residual, delta, weight, eps, y_dtype):
+    def forward(ctx, residual, delta, weight, eps, y_dtype, exact_residual=False):
         shape = residual.shape
         width = shape[-1]
         res = residual.reshape(-1, width).contiguous()
         dlt = delta.reshape(-1, width).contiguous()
+        exact_residual = (exact_residual and residual.dtype == torch.float32
+                          and delta.dtype == torch.float16 and residual.shape == delta.shape
+                          and residual.is_contiguous() and delta.is_contiguous())
         rows = res.shape[0]
         total = torch.empty_like(res, dtype=torch.promote_types(res.dtype, dlt.dtype))
         y = torch.empty(rows, width, dtype=y_dtype, device=res.device)
         rstd = torch.empty(rows, dtype=torch.float32, device=res.device)
         add_rmsnorm_fwd_kernel[(rows,)](res, dlt, weight, total, y, rstd, width, eps,
                                         BLOCK=triton.next_power_of_2(width), num_warps=8)
-        ctx.save_for_backward(total, weight, rstd)
+        if exact_residual:
+            ctx.save_for_backward(res, dlt, weight, rstd)
+        else:
+            saved_total = total
+            if (os.environ.get("SOUP_X_NORM_SAVE16", "1") == "1"
+                    and not weight.requires_grad and total.dtype == torch.float32):
+                # Forward and the live residual stay fp32; only the copy saved
+                # for the frozen norm's input derivative is rounded to fp16.
+                saved_total = total.half()
+            ctx.save_for_backward(saved_total, weight, rstd)
+        ctx.exact_residual = exact_residual
         ctx.shape, ctx.res_dtype, ctx.delta_dtype = shape, residual.dtype, delta.dtype
         return y.view(shape), total.view(shape)
 
     @staticmethod
     def backward(ctx, dy, dsum):
-        total, weight, rstd = ctx.saved_tensors
-        rows, width = total.shape
+        if ctx.exact_residual:
+            residual, delta, weight, rstd = ctx.saved_tensors
+            sum_input, delta_input = residual, delta
+        else:
+            total, weight, rstd = ctx.saved_tensors
+            sum_input = delta_input = total
+        rows, width = sum_input.shape
         dy2 = dy.reshape(rows, width).contiguous()
         has_dsum = dsum is not None
+        merge_dsum = os.environ.get("SOUP_X_MERGE_VARIANTS") == "1"
         dsum2 = dsum.reshape(rows, width).contiguous() if has_dsum else dy2
-        dres = torch.empty(rows, width, dtype=ctx.res_dtype, device=total.device)
-        ddelta = torch.empty(rows, width, dtype=ctx.delta_dtype, device=total.device)
-        add_rmsnorm_bwd_kernel[(rows,)](dy2, dsum2, total, weight, rstd, dres, ddelta, width,
-                                        BLOCK=triton.next_power_of_2(width),
-                                        HAS_DSUM=has_dsum, num_warps=8)
+        dsum_stride = 1
+        if merge_dsum and not has_dsum:
+            dsum_stride = 0
+            has_dsum = True
+        dres = torch.empty(rows, width, dtype=ctx.res_dtype, device=sum_input.device)
+        ddelta = torch.empty(rows, width, dtype=ctx.delta_dtype, device=sum_input.device)
+        add_rmsnorm_bwd_kernel[(rows,)](
+            dy2, dsum2, sum_input, weight, rstd, dres, ddelta, width, delta_input,
+            dsum_stride, BLOCK=triton.next_power_of_2(width), HAS_DSUM=has_dsum,
+            EXACT_RESIDUAL=ctx.exact_residual, MERGE_DSUM=merge_dsum, num_warps=8)
         dweight = None
         if ctx.needs_input_grad[2]:  # the norms are frozen in this task; kept for correctness
+            if ctx.exact_residual:
+                total = sum_input + delta_input.float()
+            else:
+                total = sum_input
             normed = (total.float() * rstd[:, None]).to(total.dtype)
             dweight = (dy2.float() * normed.float()).sum(0).to(weight.dtype)
-        return dres.view(ctx.shape), ddelta.view(ctx.shape), dweight, None, None
+        return dres.view(ctx.shape), ddelta.view(ctx.shape), dweight, None, None, None
 
 
-def add_rmsnorm(residual, delta, weight, eps, y_dtype):
+def add_rmsnorm(residual, delta, weight, eps, y_dtype, exact_residual=False):
     """Returns (rmsnorm(residual + delta) * weight in y_dtype, residual + delta)."""
-    return AddRMSNormFunction.apply(residual, delta, weight, eps, y_dtype)
+    return AddRMSNormFunction.apply(residual, delta, weight, eps, y_dtype, exact_residual)
 
 
 def patch_qwen2_decoder_layer():

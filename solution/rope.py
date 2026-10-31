@@ -10,6 +10,8 @@ attention then casts back to fp16; with autocast on this kernel writes the input
 which is the same value rounded at the same place and half the memory.
 """
 
+import os
+
 import torch
 import triton
 import triton.language as tl
@@ -40,6 +42,10 @@ def rope_kernel(x_ptr, cos_ptr, sin_ptr, out_ptr, seq, sxb, sxh, sxt, sob, soh, 
         out2 = x2 * c2 + x1 * s2
     tl.store(dst + offs, out1.to(out_ptr.dtype.element_ty))
     tl.store(dst + HALF + offs, out2.to(out_ptr.dtype.element_ty))
+
+
+if os.environ.get("SOUP_X_MERGE_VARIANTS") == "1":
+    rope_kernel = triton.jit(do_not_specialize=["seq"])(rope_kernel.fn)
 
 
 def _launch(x, cos, sin, out_dtype, backward):

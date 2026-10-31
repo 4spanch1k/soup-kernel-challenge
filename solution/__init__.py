@@ -32,3 +32,11 @@ def apply():
     patch_qwen2_layer_tail()  # Fuse the MLP residual with the following norm.
     patch_head()           # A: chunked output head + fused cross-entropy (ce_loss.py)
     patch_bnb_dequantize()  # E: NF4 weight dequantization (nf4_dequant.py)
+
+    from .lora_path import patch_lora_linear4bit
+    from .sft_fingerprint import patch_sft_dataset_map
+    patch_lora_linear4bit()
+    patch_sft_dataset_map()
+
+    from .activation_codec import patch_saved_activation_int8
+    patch_saved_activation_int8()
