@@ -1,6 +1,6 @@
 # Handoff: where the project stands and how to continue
 
-Written 2026-10-30 night by the Claude session that did the work, for the next session / the team.
+Started 2026-10-30; final submission status updated 2026-10-31 for the next session / the team.
 Read `README.md` for the task and results, `AGENTS.md` for the rules. This file is the *working* state.
 
 ## 1. The goal in one paragraph
@@ -29,13 +29,14 @@ optional MLP recompute (recompute.py, OFF: +16% time for -27% memory, a bad trad
 | `c2/fused4bit` | Fuse NF4 decode into a Triton GEMM | 10–200x slower than dequant plus cuBLAS on tested shapes; rejected. |
 Other tested ideas and evidence are recorded in sections 9–11 and in README. No further GPU experiments are planned for this submission.
 
-## 4. Decision rule for merging an experiment
-Run `bash scripts/kaggle_3_full.sh` for main and for the branch IN THE SAME Colab SESSION (Colab speed drifts: base
-was 75.9-80.9 s across sessions; always compare speedup against the base of the same run). Merge only if all 10 checks
-pass AND (speedup improves by >= 3% relative, or peak memory drops >= 5%) AND check 4 stays >= 6% (margin).
-A speed gain under 5% counts as a tie in the score, so tiny gains are worth little. Repeat a promising run twice.
+## 4. Historical decision rule used for the completed experiments
+At the time, a branch was eligible only if a same-session Colab A/B passed all 10 checks, improved
+speed by at least 3% or memory by 5%, and kept check 4 above 6%. Promising results were repeated
+twice because Colab speed varied across sessions. All experiment branches have since been evaluated
+and rejected; no new A/B run is a remaining task.
 
-## 5. How to run things (no local GPU on the Mac)
+## 5. Historical Colab/Kaggle commands (reference only)
+These commands document the completed GPU workflow. They are not next steps for the frozen submission.
 * Colab T4 in the app's built-in browser (the user is signed in to Google there; Kaggle has no GPU until the user
   verifies the phone). Resize the tab first: `resize_window 1400x900` (it resets every turn), click the cell,
   `cmd+a`, type ONE command, `cmd+Return`. Pitfalls: do not `pkill -f` a string that is in your own command;
