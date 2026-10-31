@@ -62,19 +62,18 @@ print(f"[result] {sys.argv[2]} wall_s={summary['wall_s']} "
 PY
 }
 
-for dataset in public edge512; do
-  if [[ "$dataset" == "public" ]]; then
-    train_file="$public_file"
-  else
-    train_file="$edge_file"
-  fi
-  for variant in attn1 attn2 resid variants all; do
-    run_case "$dataset" "$variant" A 1 "$train_file"
-    run_case "$dataset" "$variant" B 1 "$train_file"
-    run_case "$dataset" "$variant" A 2 "$train_file"
-    run_case "$dataset" "$variant" B 2 "$train_file"
-  done
-done
+printf '%s\n' '=== T4 diagnostics (first) ==='
+REPO="$repo_root" bash scripts/t4_diag.sh || true
 
-printf '%s\n' '=== T4 diagnostics ==='
-REPO="$repo_root" bash scripts/t4_diag.sh
+# trimmed run list (about 40 minutes): the full package first, then each switch alone
+for variant in all attn1 resid variants attn2; do
+  run_case public "$variant" A 1 "$public_file"
+  run_case public "$variant" B 1 "$public_file"
+  run_case public "$variant" A 2 "$public_file"
+  run_case public "$variant" B 2 "$public_file"
+done
+# dense batches: one A-B pair of the full package
+run_case edge512 all A 1 "$edge_file"
+run_case edge512 all B 1 "$edge_file"
+
+printf '%s\n' '=== done ==='
