@@ -17,7 +17,8 @@ PY
   echo "### probe $1 ($2)"
   SOUP_DB_PATH=$d/experiments.db TRITON_CACHE_DIR=$d/triton PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True HF_HUB_OFFLINE=1 \
     python -u scripts/t4_mem_probe.py --config "$d/task.yaml" --metrics "$d/metrics.json" --solution > "$d/log.txt" 2>&1
-  if grep -q "^MEMPROBE" "$d/log.txt"; then grep -A14 "^MEMPROBE" "$d/log.txt"; else echo "NO TABLE, tail of log:"; tail -25 "$d/log.txt"; fi
+  grep -A14 "^MEMPROBE" "$d/log.txt" || true
+  echo "--- tail of the training log ($1):"; grep -v "^\s*$" "$d/log.txt" | tail -22
 }
 probe pub "$REPO/data/train.jsonl"
 probe edge "$REPO/runs_exp/edge512.jsonl"
