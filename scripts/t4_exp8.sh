@@ -16,7 +16,7 @@ run_case() {
 
     if [[ "$variant" == COMBO ]]; then
         warm=1
-        fprint=1
+        fprint=0  # fixed Dataset.map fingerprint: judged doubtful by review, kept out of the combo
         merge_variants=1
         varlen=1
     fi
