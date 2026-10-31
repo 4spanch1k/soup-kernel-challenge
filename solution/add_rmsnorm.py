@@ -96,7 +96,13 @@ class AddRMSNormFunction(torch.autograd.Function):
         if exact_residual:
             ctx.save_for_backward(res, dlt, weight, rstd)
         else:
-            ctx.save_for_backward(total, weight, rstd)
+            saved_total = total
+            if (os.environ.get("SOUP_X_NORM_SAVE16") == "1"
+                    and not weight.requires_grad and total.dtype == torch.float32):
+                # Forward and the live residual stay fp32; only the copy saved
+                # for the frozen norm's input derivative is rounded to fp16.
+                saved_total = total.half()
+            ctx.save_for_backward(saved_total, weight, rstd)
         ctx.exact_residual = exact_residual
         ctx.shape, ctx.res_dtype, ctx.delta_dtype = shape, residual.dtype, delta.dtype
         return y.view(shape), total.view(shape)
