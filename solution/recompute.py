@@ -37,3 +37,36 @@ def patch_qwen2_mlp_recompute(force=None):
 
     forward._soup_recompute_patched = True
     cls.forward = forward
+
+
+def patch_qwen2_mlp_adaptive_recompute():
+    """Experiment (off by default): recompute the MLP only when a batch carries many real tokens.
+
+    The memory peak of a run is set by its densest batches only. With `SOUP_X_ADAPT_RECOMP=<rows>` the
+    MLP of a forward pass is wrapped in our own `torch.utils.checkpoint` only if that pass handles at
+    least `<rows>` token rows (valid tokens in the packed path, batch x length in the padded path), so
+    the extra forward is paid on a few steps instead of every step. Call after patch_qwen2_mlp().
+    """
+    try:
+        threshold = int(os.environ.get("SOUP_X_ADAPT_RECOMP", "0"))
+    except ValueError:
+        return
+    if threshold <= 0:
+        return
+    from transformers.models.qwen2 import modeling_qwen2
+
+    cls = modeling_qwen2.Qwen2MLP
+    if getattr(cls.forward, "_soup_adapt_recompute_patched", False):
+        return
+    inner = cls.forward
+
+    def forward(self, x):
+        if not (self.training and torch.is_grad_enabled() and x.requires_grad and x.is_cuda):
+            return inner(self, x)
+        rows = x.numel() // max(x.shape[-1], 1)
+        if rows < threshold:
+            return inner(self, x)
+        return checkpoint(inner, self, x, use_reentrant=False)
+
+    forward._soup_adapt_recompute_patched = True
+    cls.forward = forward

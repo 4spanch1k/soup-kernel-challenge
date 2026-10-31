@@ -17,7 +17,7 @@ from .add_rmsnorm import patch_qwen2_decoder_layer
 from .head_patch import patch_head
 from .layer_tail import patch_qwen2_layer_tail
 from .nf4_dequant import patch_bnb_dequantize
-from .recompute import patch_qwen2_mlp_recompute
+from .recompute import patch_qwen2_mlp_adaptive_recompute, patch_qwen2_mlp_recompute
 from .rmsnorm import patch_qwen2_rmsnorm
 from .rope import patch_qwen2_rope
 from .swiglu import patch_qwen2_mlp
@@ -26,6 +26,7 @@ from .swiglu import patch_qwen2_mlp
 def apply():
     patch_qwen2_mlp()  # the example: works out of the box, does not count as your own kernel
     patch_qwen2_mlp_recompute()  # C: MLP recomputation, off unless enabled (recompute.py)
+    patch_qwen2_mlp_adaptive_recompute()  # experiment: recompute only dense batches (off by default)
     patch_qwen2_rmsnorm()  # B: fused RMSNorm (rmsnorm.py)
     patch_qwen2_rope()     # B: fused rotary embedding (rope.py)
     patch_qwen2_decoder_layer()  # F: residual add + norm fused (add_rmsnorm.py)
