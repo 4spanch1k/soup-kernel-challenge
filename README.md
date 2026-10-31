@@ -1,5 +1,10 @@
 # Soup Kernel Challenge: mononyx
 
+**Experimental branch `d/activation-codec`:** new T4 runs reached 4339 MiB with
+all 10 checks passing and 3811 MiB in an int4 screen. These storage modes are
+still off by default; a fixed PEFT dispatch path is awaiting measurement. See
+[the experiment report](docs/performance/README.md) for exact flags and evidence.
+
 We optimized the fixed `soup train` run with our own Triton kernels. The run remains Soup CLI
 0.77.0 with Qwen2.5-1.5B-Instruct, NF4 weights, LoRA r=16 on `q_proj` and `v_proj`, and fp16 on a
 Tesla T4. The fixed task uses batch 4, up to 512 tokens and 64 steps. We did not change the model,
