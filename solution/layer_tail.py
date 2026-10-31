@@ -41,6 +41,17 @@ def _efficient_attention_operator():
         return None
 
 
+_VARLEN_SEEN = {"ok": 0, "fallback": 0}
+
+
+def _varlen_note(kind, detail=""):
+    """SOUP_X_WARM_LOG=1: count the single-call attention path and say why it stopped."""
+    _VARLEN_SEEN[kind] += 1
+    if os.environ.get("SOUP_X_WARM_LOG") and (kind == "fallback" or _VARLEN_SEEN["ok"] in (1, 28, 1000)):
+        print(f"[varlen] {kind} ok={_VARLEN_SEEN['ok']} fallback={_VARLEN_SEEN['fallback']} {detail}",
+              flush=True)
+
+
 def _call_varlen_attention(operator, query, key, value, cu_seqlens, max_seqlen, scale):
     try:
         output = operator(
@@ -57,12 +68,15 @@ def _call_varlen_attention(operator, query, key, value, cu_seqlens, max_seqlen, 
             True,
             scale=scale,
         )[0]
-    except Exception:
+    except Exception as exc:
+        _varlen_note("fallback", f"operator raised {exc!r}"[:300])
         return None
     if (output.shape != query.shape or output.dtype != query.dtype
             or (query.requires_grad or key.requires_grad or value.requires_grad)
             and not output.requires_grad):
+        _varlen_note("fallback", "output shape/dtype/grad mismatch")
         return None
+    _varlen_note("ok")
     return output
 
 
@@ -229,7 +243,8 @@ def patch_qwen2_layer_tail():
                                 attn_out = _call_varlen_attention(
                                     varlen_operator, query, key, value, cu_seqlens,
                                     max_seqlen, attention.scaling)
-                        except Exception:
+                        except Exception as exc:
+                            _varlen_note("fallback", f"prepare raised {exc!r}"[:300])
                             attn_out = None
                         if attn_out is None:
                             varlen_active = False
