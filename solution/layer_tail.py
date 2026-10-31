@@ -14,6 +14,16 @@ def _varlen_why(detail):
         print(f"[varlen] off: {detail}"[:400], flush=True)
 
 
+_LAYER_TAIL_FALLBACK_COUNTS = {}
+
+
+def _note_layer_tail_fallback(reason):
+    count = _LAYER_TAIL_FALLBACK_COUNTS.get(reason, 0) + 1
+    _LAYER_TAIL_FALLBACK_COUNTS[reason] = count
+    if count == 1 and os.environ.get("SOUP_X_WARM_LOG"):
+        print(f"[layer_tail] fallback: {reason} (count={count})", flush=True)
+
+
 def _fuse_add_norm(residual, delta, norm):
     y_dtype = autocast_dtype() or torch.promote_types(residual.dtype, norm.weight.dtype)
     return add_rmsnorm(residual, delta, norm.weight, norm.variance_epsilon, y_dtype)
@@ -103,49 +113,85 @@ def patch_qwen2_layer_tail():
     def forward(self, input_ids=None, attention_mask=None, position_ids=None, past_key_values=None,
                 inputs_embeds=None, use_cache=None, **kwargs):
         supplied_inputs_embeds = inputs_embeds
+        original_kwargs = kwargs.copy()
 
-        def fallback():
+        for name in ("output_attentions", "output_hidden_states"):
+            if kwargs.get(name) is None or kwargs.get(name) is False:
+                kwargs.pop(name, None)
+        return_dict = kwargs.get("return_dict")
+        if self.config.use_return_dict and (return_dict is None or return_dict is True):
+            kwargs.pop("return_dict", None)
+
+        def fallback(reason):
+            _note_layer_tail_fallback(reason)
             return original(self, input_ids=input_ids, attention_mask=attention_mask,
                             position_ids=position_ids, past_key_values=past_key_values,
-                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache, **kwargs)
+                            inputs_embeds=supplied_inputs_embeds, use_cache=use_cache,
+                            **original_kwargs)
 
-        if ((input_ids is None) == (inputs_embeds is None)
-                or type(self) is not modeling_qwen2.Qwen2Model
-                or not self.training or not torch.is_grad_enabled()
-                or self.gradient_checkpointing or past_key_values is not None or kwargs
-                or getattr(self.config, "output_hidden_states", False)
-                or getattr(self.config, "output_attentions", False)
-                or (self.config.use_cache if use_cache is None else use_cache)
-                or not isinstance(attention_mask, (torch.Tensor, dict, type(None)))
-                or not isinstance(position_ids, (torch.Tensor, type(None)))
-                or not self.layers or len(self.layers) != self.config.num_hidden_layers
-                or len(self.config.layer_types) != self.config.num_hidden_layers
-                or self.config.hidden_size > MAX_WIDTH
-                or type(self.norm) is not modeling_qwen2.Qwen2RMSNorm):
-            return fallback()
+        if (input_ids is None) == (inputs_embeds is None):
+            return fallback("input_ids/inputs_embeds mode")
+        if type(self) is not modeling_qwen2.Qwen2Model:
+            return fallback("Qwen2Model subclass")
+        if not self.training:
+            return fallback("model is not training")
+        if not torch.is_grad_enabled():
+            return fallback("gradients are disabled")
+        if self.gradient_checkpointing:
+            return fallback("model gradient checkpointing")
+        if past_key_values is not None:
+            return fallback("past_key_values is present")
+        if kwargs:
+            return fallback(f"unsupported kwargs: {', '.join(sorted(kwargs))}")
+        if getattr(self.config, "output_hidden_states", False):
+            return fallback("config.output_hidden_states")
+        if getattr(self.config, "output_attentions", False):
+            return fallback("config.output_attentions")
+        cache_enabled = self.config.use_cache if use_cache is None else use_cache
+        if cache_enabled:
+            return fallback("use_cache is enabled")
+        if not isinstance(attention_mask, (torch.Tensor, dict, type(None))):
+            return fallback("unsupported attention_mask type")
+        if not isinstance(position_ids, (torch.Tensor, type(None))):
+            return fallback("unsupported position_ids type")
+        if not self.layers or len(self.layers) != self.config.num_hidden_layers:
+            return fallback("Qwen2 layer count")
+        if len(self.config.layer_types) != self.config.num_hidden_layers:
+            return fallback("layer_types count")
+        if self.config.hidden_size > MAX_WIDTH:
+            return fallback("hidden_size exceeds kernel width")
+        if type(self.norm) is not modeling_qwen2.Qwen2RMSNorm:
+            return fallback("final norm type")
 
-        for layer in self.layers:
-            if (type(layer) is not modeling_qwen2.Qwen2DecoderLayer
-                    or type(layer.self_attn) is not modeling_qwen2.Qwen2Attention
-                    or type(layer.mlp) is not modeling_qwen2.Qwen2MLP
-                    or getattr(layer, "gradient_checkpointing", False)
-                    or type(layer.input_layernorm) is not modeling_qwen2.Qwen2RMSNorm
-                    or type(layer.post_attention_layernorm) is not modeling_qwen2.Qwen2RMSNorm
-                    or not layer.input_layernorm.weight.is_cuda
-                    or not layer.post_attention_layernorm.weight.is_cuda):
-                return fallback()
+        for index, layer in enumerate(self.layers):
+            if type(layer) is not modeling_qwen2.Qwen2DecoderLayer:
+                return fallback(f"layer {index} type")
+            if type(layer.self_attn) is not modeling_qwen2.Qwen2Attention:
+                return fallback(f"layer {index} attention type")
+            if type(layer.mlp) is not modeling_qwen2.Qwen2MLP:
+                return fallback(f"layer {index} MLP type")
+            if getattr(layer, "gradient_checkpointing", False):
+                return fallback(f"layer {index} gradient checkpointing")
+            if type(layer.input_layernorm) is not modeling_qwen2.Qwen2RMSNorm:
+                return fallback(f"layer {index} input norm type")
+            if type(layer.post_attention_layernorm) is not modeling_qwen2.Qwen2RMSNorm:
+                return fallback(f"layer {index} post-attention norm type")
+            if not layer.input_layernorm.weight.is_cuda:
+                return fallback(f"layer {index} input norm is not CUDA")
+            if not layer.post_attention_layernorm.weight.is_cuda:
+                return fallback(f"layer {index} post-attention norm is not CUDA")
 
         if not self.norm.weight.is_cuda or not self.embed_tokens.weight.is_cuda:
-            return fallback()
+            return fallback("final norm or embedding is not CUDA")
 
         if inputs_embeds is None:
             if not torch.is_tensor(input_ids) or not input_ids.is_cuda:
-                return fallback()
+                return fallback("input_ids is not a CUDA tensor")
             inputs_embeds = self.embed_tokens(input_ids)
         if (not torch.is_tensor(inputs_embeds) or inputs_embeds.dim() != 3
                 or not inputs_embeds.is_cuda or inputs_embeds.shape[-1] > MAX_WIDTH
                 or inputs_embeds.dtype not in (torch.float16, torch.float32)):
-            return fallback()
+            return fallback("inputs_embeds shape, device, width, or dtype")
 
         if position_ids is None:
             position_ids = torch.arange(inputs_embeds.shape[1], device=inputs_embeds.device).unsqueeze(0)
