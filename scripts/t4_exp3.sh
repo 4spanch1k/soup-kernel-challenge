@@ -1,8 +1,21 @@
 #!/usr/bin/env bash
-# Redirect: this Kaggle notebook has the GPU session set up, so it runs the c14/combo experiment from here.
-# The original paired script is scripts/t4_exp3_orig.sh.
-set -eu
-cd "$(dirname "$0")/.."
-git fetch -q origin c14/combo
-git checkout -q -f FETCH_HEAD
-exec bash scripts/t4_exp8.sh
+# Collector: print what earlier runs of this Kaggle VM left in /kaggle/working (runs_exp7 / runs_exp8 result files and logs).
+set -u
+for d in /kaggle/working/soup-exp3.*/repo/runs_exp8/* /kaggle/working/soup-exp3.*/repo/runs_exp7/*; do
+  [ -d "$d" ] || continue
+  echo "=== $d ==="
+  if [ -f "$d/result.json" ]; then
+    python3 - "$d/result.json" <<'PY'
+import json, sys
+r = json.load(open(sys.argv[1]))
+s = r.get("summary", {}).get("solution", {})
+print("[collect]", {k: s.get(k) for k in ("wall_s", "gpu_peak_mib", "eval_loss")}, flush=True)
+PY
+  else
+    echo "[collect] no result.json yet"
+  fi
+  grep -rh "^\[varlen\]\|^\[warm\]" "$d" 2>/dev/null | sort -u | head -12
+done
+ls -d /kaggle/working/soup-exp3.* 2>/dev/null
+tail -n 5 /kaggle/working/exp3.log 2>/dev/null
+echo "=== collected ==="
